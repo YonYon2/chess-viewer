@@ -32,6 +32,7 @@ pub fn main() !void {
     var alarm: f64 = 0;
     var buf = std.mem.zeroes([1024]u8);
     var flash = true;
+    // extra
     while (!ray.WindowShouldClose()) {
         timer.startTimer(0);
         if (alarm >= 1000) {
