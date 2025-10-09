@@ -201,6 +201,8 @@ test "PGN tokenize" {
     // const readMeta = fn (str: []const u8) void{};
     // const readMove = fn (comptime first: bool, str: []const u8) void{};
     // const readTime = fn () void{};
+
+    // reads the meta data part
     var it = std.mem.splitSequence(u8, ex_pgn[0..], "\n");
     // var read_meta = true;
     token_loop: while (it.next()) |token| {
@@ -213,26 +215,30 @@ test "PGN tokenize" {
         }});
     }
 
-    var move_it = std.mem.tokenizeSequence(u8, it.rest(), ". ");
+    const move_txt = try std.mem.Allocator.dupe(std.testing.allocator, u8, it.rest());
+    std.mem.replaceScalar(u8, move_txt, '\n', ' ');
 
+    var move_it = std.mem.tokenizeSequence(u8, move_txt, ". ");
     // var is_move = false;
     while (move_it.next()) |token| {
-        var replace_slice = std.mem.zeroes([1024]u8);
-        _ = try std.fmt.bufPrintZ(&replace_slice, "{s}", .{token});
-        std.mem.replaceScalar(u8, &replace_slice, '\n', ' ');
-        std.debug.print("REPLACE: {s}\n", .{&replace_slice});
-        // const trimmed = std.mem.trimEnd(u8, &replace_slice, "0123456789. ");
-        // std.debug.print("\"{s}\"\n", .{replace_slice});
+        const move = std.mem.trimEnd(u8, token, "0123456789. \n");
+        std.debug.print("\"{s}\"\n", .{move});
+        // var replace_slice = std.mem.zeroes([1024]u8);
+        // _ = try std.fmt.bufPrintZ(&replace_slice, "{s}", .{token});
+        // std.mem.replaceScalar(u8, &replace_slice, '\n', ' ');
+        // std.debug.print("REPLACE: {s}\n", .{&replace_slice});
+        // // const trimmed = std.mem.trimEnd(u8, &replace_slice, "0123456789. ");
+        // // std.debug.print("\"{s}\"\n", .{replace_slice});
 
-        var two_move = std.mem.tokenizeSequence(u8, &replace_slice, ". ");
-        // _ = two_move.next();
-        var second = false;
-        while (two_move.next()) |two_token| {
-            if (second) std.debug.print("\t", .{});
-            std.debug.print("\"{s}\"\n", .{two_token});
-            std.debug.print("\"{s}\"\n", .{std.mem.trim(u8, two_token, ". ")});
-            second = !second;
-        }
+        // var two_move = std.mem.tokenizeSequence(u8, &replace_slice, ". ");
+        // // _ = two_move.next();
+        // var second = false;
+        // while (two_move.next()) |two_token| {
+        //     if (second) std.debug.print("\t", .{});
+        //     std.debug.print("\"{s}\"\n", .{two_token});
+        //     std.debug.print("\"{s}\"\n", .{std.mem.trim(u8, two_token, ". ")});
+        //     second = !second;
+        // }
     }
 }
 
