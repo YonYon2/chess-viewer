@@ -9,4 +9,4 @@ Replays a chess.com game on Windows Terminal when given a PGN (with timestamps!)
 - playback game in real-time, rewind, or scroll move-by-move forwards and backwards
 
 ## How to run
-Build with Zig 0.15.2, then run in terminal and pass PGN text file by `PS > ./chess-viewer my_game.txt`.
+Build with Zig 0.15.2 with `zig build`, then run and pass PGN text file `> ./zig-out/chess-viewer my_game.txt`.
