@@ -1,6 +1,8 @@
 const std = @import("std");
 const ray = @cImport({
-    @cInclude("raylib.h");
+    @cDefine("RAYGUI_IMPLEMENTATION", {});
+    @cInclude("raygui.h");
+    @cInclude("raylib.H");
 });
 
 const Timer = struct {
@@ -100,18 +102,81 @@ test "player" {
     std.debug.print("{any}\n", .{p.knight});
 }
 
+const StrHolder = struct {
+    str: []const u8,
+    fn init(str: []const u8) StrHolder {
+        return .{ .str = str };
+    }
+};
+
+test "pass string" {
+    const temp = "poop";
+    const s = StrHolder.init(temp);
+    std.debug.print("\n{s}\n", .{s.str});
+}
+
+const Move = struct {
+    prev: u6,
+    next: u6,
+    take: Pieces = .nada,
+    promote: Pieces = .nada,
+};
+
 const Game = struct {
-    time: u8, // seconds
-    increment: u8, // seconds
+    const Self = @This();
+    white: []const u8,
+    black: []const u8,
+    result: []const u8,
+    time: u32, // seconds
+    increment: u32, // seconds
+    clock: [2]f32, // white/black current time
+    board: [64]u8 = "RNBQKBNRPPPPPPPP........................................................pppppppprnbqkbnr",
+    moves: std.ArrayList(Move),
+    // default if not provided
+    const Args = struct { w: []const u8 = "", b: []const u8 = "", res: []const u8 = "draw", time: u32 = 1, inc: u32 = 0 };
+    fn init(allocator: std.mem.Allocator, num_move: usize, args: Args) Game {
+        return .{
+            .white = args.w,
+            .black = args.b,
+            .result = args.res,
+            .time = args.time,
+            .increment = args.inc,
+            .clock = [1]f32{@floatFromInt(args.time)} ** 2,
+            .moves = std.ArrayList(Move).initCapacity(allocator, num_move),
+        };
+        // return ans;
+    }
+    fn deinit(self: Self, allocator: std.mem.Allocator) void {
+        self.moves.deinit(allocator);
+    }
 };
 
 const pgnReader = struct {
     const Self = @This();
-    const Modes = enum { meta, move };
-    iterator: std.mem.SplitIterator(u8, u8),
-    mode: Modes,
+    gameInfo: Game,
     fn init(game: []const u8) pgnReader {
-        return .{ .iterator = std.mem.splitScalar(u8, game, '\n'), .mode = Modes.meta };
+        // reads the meta data
+        var it = std.mem.splitScalar(u8, &game, '\n');
+        const init_args: Game.Args = undefined;
+        std.debug.print("\nGame arg for time is {}\n", .{init_args.time});
+        // var read_meta = true;
+        // while (it.next()) |token| {}
+        token_loop: while (it.next()) |token| {
+            if (token.len > 0) switch (token[0]) {
+                // std.mem.trim(u8, token, "[]")
+            } else { // empty line indicates moves are to now be read
+                break :token_loop;
+            }
+            // std.debug.print("tkn: {s}\n", .{if (token.len > 0) switch (token[0]) {
+            //     '[' => std.mem.trim(u8, token, "[]"),
+            //     else => "()",
+            // } else { // empty line indicates moves are to now be read
+            //     break :token_loop;
+            // }});
+            // std.fmt.parseInt(comptime T: type, buf: []const u8, base: u8);
+        }
+        const temp = .{ .iterator = std.mem.tokenizeSequence(u8, game, ". ") };
+        return temp;
     }
     fn next(self: *Self) bool {
         if (self.iterator.next()) |token| {
@@ -202,11 +267,11 @@ test "PGN tokenize" {
     // const readMove = fn (comptime first: bool, str: []const u8) void{};
     // const readTime = fn () void{};
 
-    // reads the meta data part
+    // reads the meta data
     var it = std.mem.splitSequence(u8, ex_pgn[0..], "\n");
     // var read_meta = true;
     token_loop: while (it.next()) |token| {
-        std.debug.print("tkn: {s}", .{if (token.len > 0) switch (token[0]) {
+        std.debug.print("tkn: {s}\n", .{if (token.len > 0) switch (token[0]) {
             '[' => std.mem.trim(u8, token, "[]"),
             else => "()",
         } else { // empty line indicates moves are to now be read
@@ -214,31 +279,42 @@ test "PGN tokenize" {
             break :token_loop;
         }});
     }
-
+    // read move data
     const move_txt = try std.mem.Allocator.dupe(std.testing.allocator, u8, it.rest());
+    defer std.testing.allocator.free(move_txt);
+
+    // replace newlines so tokens can be done by ". " and not ".\n" mess it up
     std.mem.replaceScalar(u8, move_txt, '\n', ' ');
-
     var move_it = std.mem.tokenizeSequence(u8, move_txt, ". ");
-    // var is_move = false;
-    while (move_it.next()) |token| {
-        const move = std.mem.trimEnd(u8, token, "0123456789. \n");
-        std.debug.print("\"{s}\"\n", .{move});
-        // var replace_slice = std.mem.zeroes([1024]u8);
-        // _ = try std.fmt.bufPrintZ(&replace_slice, "{s}", .{token});
-        // std.mem.replaceScalar(u8, &replace_slice, '\n', ' ');
-        // std.debug.print("REPLACE: {s}\n", .{&replace_slice});
-        // // const trimmed = std.mem.trimEnd(u8, &replace_slice, "0123456789. ");
-        // // std.debug.print("\"{s}\"\n", .{replace_slice});
-
-        // var two_move = std.mem.tokenizeSequence(u8, &replace_slice, ". ");
-        // // _ = two_move.next();
-        // var second = false;
-        // while (two_move.next()) |two_token| {
-        //     if (second) std.debug.print("\t", .{});
-        //     std.debug.print("\"{s}\"\n", .{two_token});
-        //     std.debug.print("\"{s}\"\n", .{std.mem.trim(u8, two_token, ". ")});
-        //     second = !second;
-        // }
+    while (move_it.next()) |tkn| {
+        var move_parts_it = std.mem.tokenizeAny(u8, tkn, " \n");
+        var count: usize = 0;
+        std.debug.print("\"", .{});
+        while (move_parts_it.next()) |tkn_part| : (count += 1) {
+            switch (count) {
+                0 => {
+                    // const move = std.mem.trimEnd(u8, tkn_part, "0123456789. ");
+                    std.debug.print("{s}", .{tkn_part});
+                },
+                2 => {
+                    var clock = std.mem.zeroes([1024]u8);
+                    const cutOff = std.mem.indexOfNone(u8, tkn_part, "0123456789:.").?;
+                    _ = try std.fmt.bufPrint(&clock, "{s}", .{tkn_part[0..cutOff]});
+                    std.debug.print(" {s}", .{clock});
+                },
+                3 => {
+                    const wait = std.fmt.parseUnsigned(usize, std.mem.trim(u8, tkn_part, "]} "), 10) catch blk: {
+                        std.debug.print("Invalid timestamp!\n", .{});
+                        break :blk 1;
+                    };
+                    std.debug.print(" {}", .{wait});
+                },
+                else => {
+                    // show = false;
+                },
+            }
+        }
+        std.debug.print("\"\n", .{});
     }
 }
 
