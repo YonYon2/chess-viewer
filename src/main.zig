@@ -1,7 +1,6 @@
 const std = @import("std");
 const ray = @cImport({
     @cDefine("RAYGUI_IMPLEMENTATION", {});
-    @cInclude("raygui.h");
     @cInclude("raylib.H");
 });
 
@@ -360,5 +359,6 @@ pub fn main() !void {
 
         ray.ClearBackground(ray.RAYWHITE);
         ray.DrawText(&buf, 190, 200, 20, ray.LIGHTGRAY);
+        ray.DrawCircle(100, 100, 31.4, ray.RED);
     }
 }
