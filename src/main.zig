@@ -190,6 +190,17 @@ const pgnReader = struct {
     }
 };
 
+test "read file" {
+    const cwd = std.fs.cwd();
+    const file = try cwd.openFile("test.txt", .{
+        .mode = .read_only,
+    });
+    defer file.close();
+    var buffer = std.mem.zeroes([1024]u8);
+    _ = try file.read(&buffer);
+    std.debug.print("\n{s}\n", .{buffer});
+}
+
 test "PGN tokenize" {
     std.debug.print("in the works\n", .{});
     // use split somehow (maybe splitAny for " ,")
@@ -328,6 +339,18 @@ test "PGN tokenize" {
 //
 
 pub fn main() !void {
+    var gpa = std.heap.DebugAllocator(.{}).init;
+    const allocator = gpa.allocator();
+
+    // going to use this to provide a chess PGN file to replay
+    var args = try std.process.argsWithAllocator(allocator);
+    defer args.deinit();
+    _ = args.skip();
+    if (args.next()) |argv| {
+        std.debug.print("args was {s}!\n", .{argv});
+    }
+
+    // raylib stuff
     ray.InitWindow(800, 450, "basic window");
     defer ray.CloseWindow();
 
