@@ -3,6 +3,7 @@ const ray = @cImport({
     @cDefine("RAYGUI_IMPLEMENTATION", {});
     @cInclude("raylib.H");
 });
+const Allocator = std.mem.Allocator;
 
 const Timer = struct {
     const Self = @This();
@@ -114,6 +115,15 @@ test "pass string" {
     std.debug.print("\n{s}\n", .{s.str});
 }
 
+test "string slice" {
+    // a string variable that is in the heap?
+    const a = "abc";
+    std.debug.print("\na = \"{s}\"\n&a = {}\n&a.* = {}\n", .{a, &a, &a.ptr});
+    // a slice in stack of string in heap?
+    const b: []const u8 = "cba";
+    std.debug.print("\nb = \"{s}\"\n&b = {}\n&b.* = {}\n", .{b, &b, &b.ptr});
+}
+
 const Move = struct {
     prev: u6,
     next: u6,
@@ -150,8 +160,10 @@ const Game = struct {
     }
 };
 
+// object that holds the info for what was read from a PGN file
 const pgnReader = struct {
     const Self = @This();
+    allocator: Allocator,
     gameInfo: Game,
     fn init(game: []const u8) pgnReader {
         // reads the meta data
@@ -190,15 +202,23 @@ const pgnReader = struct {
     }
 };
 
-test "read file" {
+test "read file into slice" {
+    // std.fs.cwd()
+    // const yup = std.fs.Dir.readFileAlloc(allocator: Allocator, "test.txt", max_bytes: usize);
+    // open file
     const cwd = std.fs.cwd();
     const file = try cwd.openFile("test.txt", .{
         .mode = .read_only,
     });
     defer file.close();
-    var buffer = std.mem.zeroes([1024]u8);
-    _ = try file.read(&buffer);
-    std.debug.print("\n{s}\n", .{buffer});
+    // find out the size in bytes
+    const stats = try file.stat();
+    std.debug.print("file is {} bytes?\n", .{stats.size});
+    // read after knowing the size
+    const content = try std.testing.allocator.alloc(u8, stats.size);
+    defer std.testing.allocator.free(content);
+    _ = try std.fs.cwd().readFile("test.txt", content);
+    std.debug.print("{s}\nWow! Incredible!\n", .{content});
 }
 
 test "PGN tokenize" {
