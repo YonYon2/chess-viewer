@@ -44,24 +44,22 @@ test "print piece letters" {
 // dead piece { !alive, file rank are either a1 or some previous value but are not to be used}
 // init: always dead piece unless you provide a file and rank
 
-const Square = struct { file: u8 = 'a', rank: u8 = '1' };
+const Square = struct {
+    file: u3,
+    rank: u3,
+    const default: Square = .{ .file = 0, .rank = 0 };
+};
 
 const Piece = struct {
-    alive: bool,
-    square: Square,
-    const default: Piece = .{ .alive = false, .square = .{} };
-    fn init() Piece {
-        return default;
-    }
-    fn make(square: Square) Piece {
-        return .{ .alive = true, .square = square };
-    }
-    fn makeS(square: [2]u8) Piece {
-        return .{ .alive = true, .square = .{ .file = square[0], .rank = square[1] } };
-    }
-    fn take(self: *Piece) Square {
-        self.alive = false;
-        return self.square;
+    const Self = @This();
+    alive: bool, // draw the piece
+    square: Square, // where it resides
+    const default: Piece = .{ .alive = false, .square = .default };
+    fn activate(file: u3, rank: u3) Piece {
+        return .{
+            .alive = true,
+            .square = .{ .file = file, .rank = rank },
+        };
     }
 };
 
@@ -73,28 +71,28 @@ const Player = struct {
     queen: [9]Piece,
     king: Piece,
     fn init(comptime first: bool) Player {
-        const pawn_rank = if (first) '2' else '7';
-        const main_rank = if (first) '1' else '8';
+        const pawn_rank: u3 = if (first) 1 else 6;
+        const main_rank: u3 = if (first) 0 else 7;
         return .{
             .pawn = blk: {
                 var p_arr: [8]Piece = undefined;
-                inline for (0..8) |i| p_arr[i] = .{ .alive = true, .square = .{ .file = @as(u8, i) + 'a', .rank = pawn_rank } };
+                inline for (0..8) |i| p_arr[i] = .{ .alive = true, .square = .{ .file = @truncate(i), .rank = pawn_rank } };
                 break :blk p_arr;
             },
-            .knight = [2]Piece{ Piece.makeS(.{ 'b', main_rank }), Piece.makeS(.{ 'g', main_rank }) } ++
-                [1]Piece{Piece.init()} ** 8,
-            .bishop = [2]Piece{ Piece.makeS(.{ 'c', main_rank }), Piece.makeS(.{ 'f', main_rank }) } ++
-                [1]Piece{Piece.init()} ** 8,
-            .rook = [2]Piece{ Piece.makeS(.{ 'a', main_rank }), Piece.makeS(.{ 'h', main_rank }) } ++
-                [1]Piece{Piece.init()} ** 8,
-            .queen = [1]Piece{Piece.makeS(.{ 'd', main_rank })} ++ [1]Piece{Piece.init()} ** 8,
-            .king = Piece.makeS(.{ 'e', main_rank }),
+            .knight = [2]Piece{ Piece.activate(1, main_rank), Piece.activate(6, main_rank) } ++
+                [1]Piece{Piece.default} ** 8,
+            .bishop = [2]Piece{ Piece.activate(2, main_rank), Piece.activate(5, main_rank) } ++
+                [1]Piece{Piece.default} ** 8,
+            .rook = [2]Piece{ Piece.activate(0, main_rank), Piece.activate(7, main_rank) } ++
+                [1]Piece{Piece.default} ** 8,
+            .queen = [1]Piece{Piece.activate(3, main_rank)} ++ [1]Piece{Piece.default} ** 8,
+            .king = Piece.activate(4, main_rank),
         };
     }
-    // give the pawn index
-    fn promote(self: *Player, pindex: usize) void {
-        _ = self.pawn[pindex].take();
-    }
+    // give the pawn index and what to transfer it into
+    // fn promote(self: *Player, pindex: usize) void {
+    //     _ = self.pawn[pindex].take();
+    // }
 };
 
 test "player" {
@@ -102,31 +100,9 @@ test "player" {
     std.debug.print("{any}\n", .{p.knight});
 }
 
-const StrHolder = struct {
-    str: []const u8,
-    fn init(str: []const u8) StrHolder {
-        return .{ .str = str };
-    }
-};
-
-test "pass string" {
-    const temp = "poop";
-    const s = StrHolder.init(temp);
-    std.debug.print("\n{s}\n", .{s.str});
-}
-
-test "string slice" {
-    // a string variable that is in the heap?
-    const a = "abc";
-    std.debug.print("\na = \"{s}\"\n&a = {}\n&a.* = {}\n", .{a, &a, &a.ptr});
-    // a slice in stack of string in heap?
-    const b: []const u8 = "cba";
-    std.debug.print("\nb = \"{s}\"\n&b = {}\n&b.* = {}\n", .{b, &b, &b.ptr});
-}
-
 const Move = struct {
-    prev: u6,
-    next: u6,
+    prev: Square,
+    next: Square,
     take: Pieces = .nada,
     promote: Pieces = .nada,
 };
@@ -140,10 +116,10 @@ const Game = struct {
     increment: u32, // seconds
     clock: [2]f32, // white/black current time
     board: [64]u8 = "RNBQKBNRPPPPPPPP........................................................pppppppprnbqkbnr",
-    moves: std.ArrayList(Move),
+    flip: bool,
     // default if not provided
-    const Args = struct { w: []const u8 = "", b: []const u8 = "", res: []const u8 = "draw", time: u32 = 1, inc: u32 = 0 };
-    fn init(allocator: std.mem.Allocator, num_move: usize, args: Args) Game {
+    // const Args = struct { w: []const u8 = "", b: []const u8 = "", res: []const u8 = "draw", time: u32 = 1, inc: u32 = 0 };
+    fn init(args: struct { w: []const u8 = "", b: []const u8 = "", res: []const u8 = "draw", time: u32 = 1, inc: u32 = 0 }) Game {
         return .{
             .white = args.w,
             .black = args.b,
@@ -151,12 +127,8 @@ const Game = struct {
             .time = args.time,
             .increment = args.inc,
             .clock = [1]f32{@floatFromInt(args.time)} ** 2,
-            .moves = std.ArrayList(Move).initCapacity(allocator, num_move),
         };
         // return ans;
-    }
-    fn deinit(self: Self, allocator: std.mem.Allocator) void {
-        self.moves.deinit(allocator);
     }
 };
 
