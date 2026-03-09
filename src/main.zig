@@ -101,12 +101,21 @@ test "player" {
 }
 
 const Move = struct {
+    piece: Pieces,
     prev: Square,
     next: Square,
-    take: Pieces = .nada,
-    promote: Pieces = .nada,
 };
 
+// for the purposes of updating the screen
+const Change = struct {
+    prev: Piece,
+    next: Piece,
+    
+    delay: usize, // tenths of a second
+};
+
+// reference for understanding how to read PGN moves
+// https://www.saremba.de/chessgml/standards/pgn/pgn-complete.htm
 const Game = struct {
     const Self = @This();
     white: []const u8,
@@ -114,63 +123,51 @@ const Game = struct {
     result: []const u8,
     time: u32, // seconds
     increment: u32, // seconds
-    clock: [2]f32, // white/black current time
+    clock: [2]usize, // white/black clocks (tenths of a second)
     board: [64]u8 = "RNBQKBNRPPPPPPPP........................................................pppppppprnbqkbnr",
     flip: bool,
     // default if not provided
-    // const Args = struct { w: []const u8 = "", b: []const u8 = "", res: []const u8 = "draw", time: u32 = 1, inc: u32 = 0 };
-    fn init(args: struct { w: []const u8 = "", b: []const u8 = "", res: []const u8 = "draw", time: u32 = 1, inc: u32 = 0 }) Game {
+    const Args = struct { w: []const u8 = "", b: []const u8 = "", res: []const u8 = "draw", time: u32 = 1, inc: u32 = 0, flip: bool = false, };
+    fn init(args: Args) Game {
         return .{
             .white = args.w,
             .black = args.b,
             .result = args.res,
             .time = args.time,
             .increment = args.inc,
-            .clock = [1]f32{@floatFromInt(args.time)} ** 2,
+            .clock = [1]usize{args.time*10} ** 2,
+            .flip = args.flip,
         };
         // return ans;
+    }
+    fn playBack(self: Self) void { // iterates through the moves made
+
     }
 };
 
 // object that holds the info for what was read from a PGN file
 const pgnReader = struct {
     const Self = @This();
-    allocator: Allocator,
+    moves: Moves
     gameInfo: Game,
-    fn init(game: []const u8) pgnReader {
-        // reads the meta data
-        var it = std.mem.splitScalar(u8, &game, '\n');
-        const init_args: Game.Args = undefined;
-        std.debug.print("\nGame arg for time is {}\n", .{init_args.time});
-        // var read_meta = true;
-        // while (it.next()) |token| {}
-        token_loop: while (it.next()) |token| {
-            if (token.len > 0) switch (token[0]) {
-                // std.mem.trim(u8, token, "[]")
-            } else { // empty line indicates moves are to now be read
-                break :token_loop;
-            }
-            // std.debug.print("tkn: {s}\n", .{if (token.len > 0) switch (token[0]) {
-            //     '[' => std.mem.trim(u8, token, "[]"),
-            //     else => "()",
-            // } else { // empty line indicates moves are to now be read
-            //     break :token_loop;
-            // }});
-            // std.fmt.parseInt(comptime T: type, buf: []const u8, base: u8);
-        }
-        const temp = .{ .iterator = std.mem.tokenizeSequence(u8, game, ". ") };
-        return temp;
-    }
-    fn next(self: *Self) bool {
-        if (self.iterator.next()) |token| {
-            if (token.len > 0) {
-                switch (self.mode) {
-                    pgnReader.Modes.meta => "",
-                    else => "",
-                }
-            }
-        } else return false;
-        return true;
+    fn init(filename: []const u8) pgnReader {
+        const cwd = std.fs.cwd();
+        const file = try cwd.openFile("test.txt", .{
+            .mode = .read_only,
+        });
+        defer file.close();
+        // find out the size in bytes
+        const stats = try file.stat();
+        std.debug.print("file is {} bytes?\n", .{stats.size});
+        // read after knowing the size
+        const content = try std.testing.allocator.alloc(u8, stats.size);
+        defer std.testing.allocator.free(content);
+        _ = try std.fs.cwd().readFile("test.txt", content);
+        var args: Game.Args = .{};
+        args.flip = true;
+        return .{
+            .gameInfo = Game.init(args),
+        };
     }
 };
 
@@ -264,11 +261,6 @@ test "PGN tokenize" {
         \\28]} 47. Kf2 {[%clk 0:01:19.8][%timestamp 21]} 47... Kh5 {[%clk
         \\0:01:28.2][%timestamp 14]} 48. Qxg6# {[%clk 0:01:18.7][%timestamp 11]} 1-0
     ;
-    //_ = ex_pgn;
-    // const readMeta = fn (str: []const u8) void{};
-    // const readMove = fn (comptime first: bool, str: []const u8) void{};
-    // const readTime = fn () void{};
-
     // reads the meta data
     var it = std.mem.splitSequence(u8, ex_pgn[0..], "\n");
     // var read_meta = true;
