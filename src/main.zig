@@ -106,11 +106,20 @@ const Move = struct {
     next: Square,
 };
 
+const ChessUnicode = enum(u21) { K = 0x2654, Q, R, B, N, P, k, q, r, b, n, p };
+
+test "print chess" {
+    std.debug.print("\nKing {u}\n", .{@intFromEnum(ChessUnicode.K)});
+    inline for (@typeInfo(ChessUnicode).@"enum".fields) |e| {
+        std.debug.print("{s} = {u}\n", .{ e.name, e.value });
+    }
+}
+
 // for the purposes of updating the screen
 const Change = struct {
     prev: Piece,
     next: Piece,
-    
+
     delay: usize, // tenths of a second
 };
 
@@ -127,7 +136,14 @@ const Game = struct {
     board: [64]u8 = "RNBQKBNRPPPPPPPP........................................................pppppppprnbqkbnr",
     flip: bool,
     // default if not provided
-    const Args = struct { w: []const u8 = "", b: []const u8 = "", res: []const u8 = "draw", time: u32 = 1, inc: u32 = 0, flip: bool = false, };
+    const Args = struct {
+        w: []const u8 = "",
+        b: []const u8 = "",
+        res: []const u8 = "draw",
+        time: u32 = 1,
+        inc: u32 = 0,
+        flip: bool = false,
+    };
     fn init(args: Args) Game {
         return .{
             .white = args.w,
@@ -135,24 +151,23 @@ const Game = struct {
             .result = args.res,
             .time = args.time,
             .increment = args.inc,
-            .clock = [1]usize{args.time*10} ** 2,
+            .clock = [1]usize{args.time * 10} ** 2,
             .flip = args.flip,
         };
         // return ans;
     }
-    fn playBack(self: Self) void { // iterates through the moves made
+    // fn playBack(self: Self) void { // iterates through the moves made
 
-    }
+    // }
 };
 
 // object that holds the info for what was read from a PGN file
 const pgnReader = struct {
     const Self = @This();
-    moves: Moves
     gameInfo: Game,
     fn init(filename: []const u8) pgnReader {
         const cwd = std.fs.cwd();
-        const file = try cwd.openFile("test.txt", .{
+        const file = try cwd.openFile(filename, .{
             .mode = .read_only,
         });
         defer file.close();

@@ -1,6 +1,6 @@
 # chess-viewer
 
-Replays a chess.com game on Windows Terminal when given a PGN (with timestamps!) as a text file.
+Replays a chess.com game on Windows Terminal when you download a PGN with timestamps from chess.com.
 
 ## Features
 - prints the chess board with pieces, name of players, time increment, and clocks in ASCII with colors
