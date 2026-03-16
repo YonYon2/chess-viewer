@@ -99,7 +99,7 @@ const Game = struct {
     time: u32, // seconds
     increment: u32, // seconds
     clock: [2]u32, // 10ths of a second
-    board: [64]u8 = "RNBQKBNRPPPPPPPP........................................................pppppppprnbqkbnr",
+    board: [64]u8 = "RNBQKBNRPPPPPPPP................................pppppppprnbqkbnr".*,
     flip: bool,
     // default if not provided
     const Args = struct {
@@ -118,7 +118,7 @@ const Game = struct {
             .result = args.res,
             .time = args.time,
             .increment = args.inc,
-            .clock = [1]usize{args.time * 10} ** 2,
+            .clock = [1]u32{args.time * 10} ** 2,
             .flip = args.flip,
         };
         // return ans;
@@ -144,32 +144,8 @@ const pgnReader = struct {
     allocator: Allocator,
     game_info: Game,
     move_list: std.ArrayList(Change),
-    fn init(allocator: Allocator, filename: []const u8) pgnReader {
-        const cwd = std.fs.cwd();
-        const file = try cwd.openFile(filename, .{
-            .mode = .read_only,
-        });
-        defer file.close();
-        // find out the size in bytes
-        const stats = try file.stat();
-        std.debug.print("file is {} bytes?\n", .{stats.size});
-        // read after knowing the size
-        const content = try std.testing.allocator.alloc(u8, stats.size);
-        defer std.testing.allocator.free(content);
-        _ = try std.fs.cwd().readFile("test.txt", content);
-
-        const move_list = pgnReader.createMoves(allocator);
-
-        var args: Game.Args = .{};
-        args.flip = true;
-        return .{
-            .allocator = allocator,
-            .game_info = Game.init(args),
-            .move_list = move_list,
-        };
-    }
-    fn createMoves(allocator: Allocator, contents: []const u8) std.ArrayList(Change) {
-        const moveList = try std.ArrayList(Change).initCapacity(allocator, 50);
+    fn init(allocator: Allocator, contents: []const u8) !pgnReader {
+        const move_list = try std.ArrayList(Change).initCapacity(allocator, 50);
         var it = std.mem.splitSequence(u8, contents, "\n");
         // var read_meta = true;
         token_loop: while (it.next()) |token| {
@@ -182,9 +158,9 @@ const pgnReader = struct {
             }});
         }
         // make copy of the rest of contents
-        // const move_txt = try allocator.dupe( u8, it.rest());
-        // defer allocator.free(move_txt);
-        const move_txt: []u8 = &std.mem.zeroes([it.rest().len]u8);
+        const move_txt = try allocator.dupe(u8, it.rest());
+        defer allocator.free(move_txt);
+        // const move_txt: []u8 = &std.mem.zeroes([it.rest().len]u8);
 
         // replace newlines so tokens can be done by ". " and not ".\n" mess it up
         std.mem.replaceScalar(u8, move_txt, '\n', ' ');
@@ -219,19 +195,33 @@ const pgnReader = struct {
             }
             std.debug.print("\"\n", .{});
         }
-        return moveList;
+        var args: Game.Args = .{};
+        args.flip = true;
+        return .{
+            .allocator = allocator,
+            .game_info = Game.init(args),
+            .move_list = move_list,
+        };
     }
-    fn deinit(self: Self) void {
-        self.moveList.deinit(self.allocator);
+    fn deinit(self: *Self) void {
+        self.move_list.deinit(self.allocator);
     }
 };
 
+test "new" {
+    const cwd = std.fs.cwd();
+    const file = try cwd.openFile("test-pgn/ex_game.txt", .{
+        .mode = .read_only,
+    });
+    defer file.close();
+    var buff: [1024]u8 = undefined;
+    std.debug.print("{}", .{try file.read(&buff)});
+}
+
 test "read file into slice" {
-    // std.fs.cwd()
-    // const yup = std.fs.Dir.readFileAlloc(allocator: Allocator, "test.txt", max_bytes: usize);
     // open file
     const cwd = std.fs.cwd();
-    const file = try cwd.openFile("test.txt", .{
+    const file = try cwd.openFile("ugh", .{
         .mode = .read_only,
     });
     defer file.close();
@@ -379,13 +369,37 @@ test "PGN tokenize" {
 
 pub fn main() !void {
     var gpa = std.heap.DebugAllocator(.{}).init;
+    defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
     // going to use this to provide a chess PGN file to replay
     var args = try std.process.argsWithAllocator(allocator);
     defer args.deinit();
-    _ = args.skip();
+    _ = args.skip(); // skip executable's name
+
+    var fname: []const u8 = &.{};
     if (args.next()) |argv| {
         std.debug.print("args was {s}!\n", .{argv});
+        fname = argv;
+    } else {
+        std.debug.print("Usage: chess-viewer fname", .{});
+        return;
     }
+
+    const cwd = std.fs.cwd();
+    const file = try cwd.openFile(fname, .{
+        .mode = .read_only,
+    });
+    // find out the size in bytes
+    const stats = try file.stat();
+    std.debug.print("file is {} bytes?\n", .{stats.size});
+    // read after knowing the size
+    const content = try allocator.alloc(u8, stats.size);
+    defer allocator.free(content);
+    std.debug.print("{s}\nWow! Incredible!\n", .{content});
+    _ = try cwd.readFile(fname, content);
+    file.close();
+
+    // var my_pgn = try pgnReader.init(allocator, fname);
+    // defer my_pgn.deinit();
 }
