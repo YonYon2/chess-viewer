@@ -31,12 +31,7 @@
     // `zig build --fetch` can be used to fetch all dependencies of a package, recursively.
     // Once all dependencies are fetched, `zig build` no longer requires
     // internet connectivity.
-    .dependencies = .{
-        .raylib = .{
-            .url = "git+https://github.com/raysan5/raylib#2554dcba9b9175781ba042b7d13c9a80d7d5fb6d",
-            .hash = "raylib-5.6.0-dev-whq8uMdAywRslrEvRWUK7QPyTJpVGpyj33B75r9mbaCW",
-        },
-    },
+    .dependencies = .{},
     .paths = .{
         "build.zig",
         "build.zig.zon",

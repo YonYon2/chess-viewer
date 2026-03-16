@@ -1,31 +1,5 @@
 const std = @import("std");
-const ray = @cImport({
-    @cDefine("RAYGUI_IMPLEMENTATION", {});
-    @cInclude("raylib.H");
-});
 const Allocator = std.mem.Allocator;
-
-const Timer = struct {
-    const Self = @This();
-    start: f64,
-    life: f64, // duration; constant
-    fn makeTimer() Timer {
-        return .{ .start = 0, .life = 0 };
-    }
-    fn startTimer(self: *Self, life: f64) void {
-        self.start = ray.GetTime();
-        self.life = life;
-    }
-    fn resetTimer(self: *Self) void {
-        self.start = ray.GetTime();
-    }
-    fn timerDone(self: Self) bool {
-        return ray.GetTime() - self.start >= self.life;
-    }
-    fn getElapsed(self: Self) f64 {
-        return ray.GetTime() - self.start;
-    }
-};
 
 const Pieces = enum { nada, P, N, B, R, Q, K, p, n, b, r, q, k };
 
@@ -115,14 +89,6 @@ test "print chess" {
     }
 }
 
-// for the purposes of updating the screen
-const Change = struct {
-    prev: Piece,
-    next: Piece,
-
-    delay: usize, // tenths of a second
-};
-
 // reference for understanding how to read PGN moves
 // https://www.saremba.de/chessgml/standards/pgn/pgn-complete.htm
 const Game = struct {
@@ -132,16 +98,17 @@ const Game = struct {
     result: []const u8,
     time: u32, // seconds
     increment: u32, // seconds
-    clock: [2]usize, // white/black clocks (tenths of a second)
+    clock: [2]u32, // 10ths of a second
     board: [64]u8 = "RNBQKBNRPPPPPPPP........................................................pppppppprnbqkbnr",
     flip: bool,
     // default if not provided
     const Args = struct {
-        w: []const u8 = "",
-        b: []const u8 = "",
+        w: []const u8 = "Player 1",
+        b: []const u8 = "Player 2",
         res: []const u8 = "draw",
-        time: u32 = 1,
+        time: u32 = 60,
         inc: u32 = 0,
+        clock: [2]u32 = .{ 600, 600 },
         flip: bool = false,
     };
     fn init(args: Args) Game {
@@ -161,11 +128,23 @@ const Game = struct {
     // }
 };
 
+// for the purposes of updating the screen
+const Change = struct {
+    from: Square,
+    to: Square,
+    mover: Piece,
+    replace: ?Piece,
+    promote: ?Piece,
+    delay: usize, // tenths of a second
+};
+
 // object that holds the info for what was read from a PGN file
 const pgnReader = struct {
     const Self = @This();
-    gameInfo: Game,
-    fn init(filename: []const u8) pgnReader {
+    allocator: Allocator,
+    game_info: Game,
+    move_list: std.ArrayList(Change),
+    fn init(allocator: Allocator, filename: []const u8) pgnReader {
         const cwd = std.fs.cwd();
         const file = try cwd.openFile(filename, .{
             .mode = .read_only,
@@ -178,11 +157,72 @@ const pgnReader = struct {
         const content = try std.testing.allocator.alloc(u8, stats.size);
         defer std.testing.allocator.free(content);
         _ = try std.fs.cwd().readFile("test.txt", content);
+
+        const move_list = pgnReader.createMoves(allocator);
+
         var args: Game.Args = .{};
         args.flip = true;
         return .{
-            .gameInfo = Game.init(args),
+            .allocator = allocator,
+            .game_info = Game.init(args),
+            .move_list = move_list,
         };
+    }
+    fn createMoves(allocator: Allocator, contents: []const u8) std.ArrayList(Change) {
+        const moveList = try std.ArrayList(Change).initCapacity(allocator, 50);
+        var it = std.mem.splitSequence(u8, contents, "\n");
+        // var read_meta = true;
+        token_loop: while (it.next()) |token| {
+            std.debug.print("tkn: {s}\n", .{if (token.len > 0) switch (token[0]) {
+                '[' => std.mem.trim(u8, token, "[]"),
+                else => "()",
+            } else { // empty line indicates moves are to now be read
+                // read_meta = false;
+                break :token_loop;
+            }});
+        }
+        // make copy of the rest of contents
+        // const move_txt = try allocator.dupe( u8, it.rest());
+        // defer allocator.free(move_txt);
+        const move_txt: []u8 = &std.mem.zeroes([it.rest().len]u8);
+
+        // replace newlines so tokens can be done by ". " and not ".\n" mess it up
+        std.mem.replaceScalar(u8, move_txt, '\n', ' ');
+        var move_it = std.mem.tokenizeSequence(u8, move_txt, ". ");
+        while (move_it.next()) |tkn| {
+            var move_parts_it = std.mem.tokenizeAny(u8, tkn, " \n");
+            var count: usize = 0;
+            std.debug.print("\"", .{});
+            while (move_parts_it.next()) |tkn_part| : (count += 1) {
+                switch (count) {
+                    0 => {
+                        // const move = std.mem.trimEnd(u8, tkn_part, "0123456789. ");
+                        std.debug.print("{s}", .{tkn_part});
+                    },
+                    2 => {
+                        var clock = std.mem.zeroes([1024]u8);
+                        const cutOff = std.mem.indexOfNone(u8, tkn_part, "0123456789:.").?;
+                        _ = try std.fmt.bufPrint(&clock, "{s}", .{tkn_part[0..cutOff]});
+                        std.debug.print(" {s}", .{clock});
+                    },
+                    3 => {
+                        const wait = std.fmt.parseUnsigned(usize, std.mem.trim(u8, tkn_part, "]} "), 10) catch blk: {
+                            std.debug.print("Invalid timestamp!\n", .{});
+                            break :blk 1;
+                        };
+                        std.debug.print(" {}", .{wait});
+                    },
+                    else => {
+                        // show = false;
+                    },
+                }
+            }
+            std.debug.print("\"\n", .{});
+        }
+        return moveList;
+    }
+    fn deinit(self: Self) void {
+        self.moveList.deinit(self.allocator);
     }
 };
 
@@ -347,40 +387,5 @@ pub fn main() !void {
     _ = args.skip();
     if (args.next()) |argv| {
         std.debug.print("args was {s}!\n", .{argv});
-    }
-
-    // raylib stuff
-    ray.InitWindow(800, 450, "basic window");
-    defer ray.CloseWindow();
-
-    ray.SetTargetFPS(60);
-
-    // init
-    var alarm: [2]Timer = .{ Timer.makeTimer(), Timer.makeTimer() }; // every 0.5s and 0.1s
-    alarm[0].startTimer(0.5);
-    alarm[1].startTimer(0.1);
-    var buf = std.mem.zeroes([1024]u8);
-    var flash: [2]bool = .{ true, true };
-    while (!ray.WindowShouldClose()) {
-        // logic and calc
-        const dt = alarm[0].getElapsed();
-
-        for (&alarm, 0..) |*a, i| {
-            if (a.timerDone()) {
-                a.resetTimer();
-                flash[i] = true;
-            } else flash[i] = false;
-        }
-        const flash_c1: u21 = if (flash[0]) '@' else ' ';
-        const flash_c2: u21 = if (flash[1]) '@' else ' ';
-        _ = try std.fmt.bufPrintZ(&buf, "{d:x<8.6}\n{d:x<8.6}\n[{u}]\n[{u}]", .{ 3.14, dt, flash_c1, flash_c2 });
-
-        // everything drawing
-        ray.BeginDrawing();
-        defer ray.EndDrawing();
-
-        ray.ClearBackground(ray.RAYWHITE);
-        ray.DrawText(&buf, 190, 200, 20, ray.LIGHTGRAY);
-        ray.DrawCircle(100, 100, 31.4, ray.RED);
     }
 }

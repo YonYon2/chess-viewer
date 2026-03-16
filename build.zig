@@ -13,12 +13,12 @@ pub fn build(b: *std.Build) void {
         }),
     });
 
-    const raylib_dep = b.dependency("raylib", .{
-        .target = target,
-        .optimize = optimize,
-    });
-    const raylib = raylib_dep.artifact("raylib");
-    exe.root_module.linkLibrary(raylib);
+    // const raylib_dep = b.dependency("raylib", .{
+    //     .target = target,
+    //     .optimize = optimize,
+    // });
+    // const raylib = raylib_dep.artifact("raylib");
+    // exe.root_module.linkLibrary(raylib);
 
     b.installArtifact(exe);
 
