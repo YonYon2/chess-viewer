@@ -123,9 +123,6 @@ const Game = struct {
         };
         // return ans;
     }
-    // fn playBack(self: Self) void { // iterates through the moves made
-
-    // }
 };
 
 // for the purposes of updating the screen
@@ -146,27 +143,27 @@ const pgnReader = struct {
     move_list: std.ArrayList(Change),
     fn init(allocator: Allocator, contents: []const u8) !pgnReader {
         const move_list = try std.ArrayList(Change).initCapacity(allocator, 50);
-        var it = std.mem.splitSequence(u8, contents, "\n");
+        var it = std.mem.splitSequence(u8, contents, "\r\n");
         // var read_meta = true;
-        token_loop: while (it.next()) |token| {
-            std.debug.print("tkn: {s}\n", .{if (token.len > 0) switch (token[0]) {
-                '[' => std.mem.trim(u8, token, "[]"),
-                else => "()",
-            } else { // empty line indicates moves are to now be read
-                // read_meta = false;
-                break :token_loop;
-            }});
+        while (it.next()) |token| {
+            if (token.len == 0)
+                break;
+            std.debug.print("{}, {} tkn: {s}\n", .{token[0], token[token.len-1], switch (token[0]) {
+                    '[' => std.mem.trim(u8, token, "[]"),
+                    else => "()",
+                }
+            });
         }
-        // make copy of the rest of contents
-        const move_txt = try allocator.dupe(u8, it.rest());
+        // make copy of the rest of contents and remove newlines (helps to have "1. " and not "1.\r\n" before a move)
+        const new_len = std.mem.replacementSize(u8, it.rest(), "\r\n", " ");
+        const move_txt = try allocator.alloc(u8, new_len);
         defer allocator.free(move_txt);
-        // const move_txt: []u8 = &std.mem.zeroes([it.rest().len]u8);
+        _ = std.mem.replace(u8, it.rest(), "\r\n", " ", move_txt);
 
-        // replace newlines so tokens can be done by ". " and not ".\n" mess it up
-        std.mem.replaceScalar(u8, move_txt, '\n', ' ');
+        // go ply by ply
         var move_it = std.mem.tokenizeSequence(u8, move_txt, ". ");
         while (move_it.next()) |tkn| {
-            var move_parts_it = std.mem.tokenizeAny(u8, tkn, " \n");
+            var move_parts_it = std.mem.tokenizeScalar(u8, tkn, ' ');
             var count: usize = 0;
             std.debug.print("\"", .{});
             while (move_parts_it.next()) |tkn_part| : (count += 1) {
@@ -183,7 +180,7 @@ const pgnReader = struct {
                     },
                     3 => {
                         const wait = std.fmt.parseUnsigned(usize, std.mem.trim(u8, tkn_part, "]} "), 10) catch blk: {
-                            std.debug.print("Invalid timestamp!\n", .{});
+                            std.debug.print(" Invalid timestamp!", .{});
                             break :blk 1;
                         };
                         std.debug.print(" {}", .{wait});
@@ -310,13 +307,13 @@ test "PGN tokenize" {
     var it = std.mem.splitSequence(u8, ex_pgn[0..], "\n");
     // var read_meta = true;
     token_loop: while (it.next()) |token| {
-        std.debug.print("tkn: {s}\n", .{if (token.len > 0) switch (token[0]) {
+        std.debug.print("tkn: {s}{any}\n", .{if (token.len > 0) switch (token[0]) {
             '[' => std.mem.trim(u8, token, "[]"),
             else => "()",
         } else { // empty line indicates moves are to now be read
             // read_meta = false;
             break :token_loop;
-        }});
+        }, token});
     }
     // read move data
     const move_txt = try std.mem.Allocator.dupe(std.testing.allocator, u8, it.rest());
@@ -390,16 +387,16 @@ pub fn main() !void {
     const file = try cwd.openFile(fname, .{
         .mode = .read_only,
     });
+    defer file.close();
     // find out the size in bytes
     const stats = try file.stat();
     std.debug.print("file is {} bytes?\n", .{stats.size});
     // read after knowing the size
     const content = try allocator.alloc(u8, stats.size);
     defer allocator.free(content);
-    std.debug.print("{s}\nWow! Incredible!\n", .{content});
     _ = try cwd.readFile(fname, content);
-    file.close();
+    std.debug.print("{s}\nWow! Incredible!\n", .{content});
 
-    // var my_pgn = try pgnReader.init(allocator, fname);
-    // defer my_pgn.deinit();
+    var my_pgn = try pgnReader.init(allocator, content);
+    defer my_pgn.deinit();
 }
