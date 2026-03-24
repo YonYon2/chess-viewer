@@ -1,6 +1,72 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
+const ex_pgn =
+    \\[White "Guest7527675399"]
+    \\[Black "Guest4401176224"]
+    \\[Result "1-0"]
+    \\[TimeControl "180"]
+    \\[WhiteElo "400"]
+    \\[BlackElo "400"]
+    \\[Termination "Guest7527675399 won by checkmate"]
+    \\[Link "https://www.chess.com/game/143827314072"]
+    \\
+    \\1. Nh3 {[%clk 0:02:59.1][%timestamp 9]} 1... d5 {[%clk 0:02:56.5][%timestamp
+    \\35]} 2. d3 {[%clk 0:02:58.6][%timestamp 5]} 2... Bxh3 {[%clk
+    \\0:02:54.4][%timestamp 21]} 3. gxh3 {[%clk 0:02:57.7][%timestamp 9]} 3... Qc8
+    \\{[%clk 0:02:53.4][%timestamp 10]} 4. Bg2 {[%clk 0:02:57.2][%timestamp 5]} 4...
+    \\c6 {[%clk 0:02:51.3][%timestamp 21]} 5. c4 {[%clk 0:02:56.5][%timestamp 7]} 5...
+    \\Nf6 {[%clk 0:02:48.7][%timestamp 26]} 6. cxd5 {[%clk 0:02:55.6][%timestamp 9]}
+    \\6... Nxd5 {[%clk 0:02:48.6][%timestamp 1]} 7. Bxd5 {[%clk 0:02:54.9][%timestamp
+    \\7]} 7... c5 {[%clk 0:02:47.9][%timestamp 7]} 8. Qa4+ {[%clk
+    \\0:02:53.6][%timestamp 13]} 8... Nc6 {[%clk 0:02:45.9][%timestamp 20]} 9. Bxc6+
+    \\{[%clk 0:02:52.5][%timestamp 11]} 9... bxc6 {[%clk 0:02:44.9][%timestamp 10]}
+    \\10. Nc3 {[%clk 0:02:47.6][%timestamp 49]} 10... Kd7 {[%clk 0:02:41.3][%timestamp
+    \\36]} 11. Ne4 {[%clk 0:02:46.4][%timestamp 12]} 11... e6 {[%clk
+    \\0:02:38.7][%timestamp 26]} 12. Nxc5+ {[%clk 0:02:45.4][%timestamp 10]} 12...
+    \\Bxc5 {[%clk 0:02:37.3][%timestamp 14]} 13. d4 {[%clk 0:02:42.8][%timestamp 26]}
+    \\13... Bd6 {[%clk 0:02:34.6][%timestamp 27]} 14. e4 {[%clk 0:02:41][%timestamp
+    \\18]} 14... Kc7 {[%clk 0:02:31.6][%timestamp 30]} 15. e5 {[%clk
+    \\0:02:39.7][%timestamp 13]} 15... Be7 {[%clk 0:02:30.2][%timestamp 14]} 16. Qa5+
+    \\{[%clk 0:02:36.4][%timestamp 33]} 16... Kd7 {[%clk 0:02:28.6][%timestamp 16]}
+    \\17. Bd2 {[%clk 0:02:32.8][%timestamp 36]} 17... Qb7 {[%clk 0:02:23.4][%timestamp
+    \\52]} 18. b3 {[%clk 0:02:27.6][%timestamp 52]} 18... Rab8 {[%clk
+    \\0:02:18.1][%timestamp 53]} 19. Rb1 {[%clk 0:02:20.7][%timestamp 69]} 19... Bb4
+    \\{[%clk 0:02:17.6][%timestamp 5]} 20. Bxb4 {[%clk 0:02:18.8][%timestamp 19]}
+    \\20... Qxb4+ {[%clk 0:02:16.7][%timestamp 9]} 21. Qxb4 {[%clk
+    \\0:02:16.8][%timestamp 20]} 21... Rxb4 {[%clk 0:02:16.4][%timestamp 3]} 22. Ke2
+    \\{[%clk 0:02:13.5][%timestamp 33]} 22... Rxd4 {[%clk 0:02:15][%timestamp 14]} 23.
+    \\Rhc1 {[%clk 0:02:11][%timestamp 25]} 23... Re4+ {[%clk 0:02:13.3][%timestamp
+    \\17]} 24. Kf3 {[%clk 0:02:09.1][%timestamp 19]} 24... Rxe5 {[%clk
+    \\0:02:12.5][%timestamp 8]} 25. b4 {[%clk 0:02:07.6][%timestamp 15]} 25... Rb8
+    \\{[%clk 0:02:10.6][%timestamp 19]} 26. a3 {[%clk 0:02:06.3][%timestamp 13]} 26...
+    \\Rbb5 {[%clk 0:02:09.6][%timestamp 10]} 27. a4 {[%clk 0:02:04.4][%timestamp 19]}
+    \\27... Rf5+ {[%clk 0:02:08.9][%timestamp 7]} 28. Kg3 {[%clk 0:02:02.8][%timestamp
+    \\16]} 28... Rbd5 {[%clk 0:02:06.7][%timestamp 22]} 29. f3 {[%clk
+    \\0:02:00.7][%timestamp 21]} 29... h5 {[%clk 0:02:04.5][%timestamp 22]} 30. Rc3
+    \\{[%clk 0:01:58.9][%timestamp 18]} 30... Rf6 {[%clk 0:02:03.5][%timestamp 10]}
+    \\31. Rbb3 {[%clk 0:01:57.5][%timestamp 14]} 31... Rg6+ {[%clk
+    \\0:02:02.6][%timestamp 9]} 32. Kf2 {[%clk 0:01:55][%timestamp 25]} 32... h4
+    \\{[%clk 0:02:01.4][%timestamp 12]} 33. b5 {[%clk 0:01:52.6][%timestamp 24]} 33...
+    \\Rd6 {[%clk 0:01:58.5][%timestamp 29]} 34. b6 {[%clk 0:01:50.8][%timestamp 18]}
+    \\34... a6 {[%clk 0:01:56.5][%timestamp 20]} 35. b7 {[%clk 0:01:49.7][%timestamp
+    \\11]} 35... Rd2+ {[%clk 0:01:53.3][%timestamp 32]} 36. Ke3 {[%clk
+    \\0:01:47][%timestamp 27]} 36... Rb2 {[%clk 0:01:45.7][%timestamp 76]} 37. Rxb2
+    \\{[%clk 0:01:44.7][%timestamp 23]} 37... Kc7 {[%clk 0:01:45][%timestamp 7]} 38.
+    \\b8=Q+ {[%clk 0:01:42.7][%timestamp 20]} 38... Kd7 {[%clk 0:01:43.5][%timestamp
+    \\15]} 39. Qb7+ {[%clk 0:01:39.4][%timestamp 33]} 39... Kd6 {[%clk
+    \\0:01:41.2][%timestamp 23]} 40. Qxc6+ {[%clk 0:01:38.7][%timestamp 7]} 40... Ke5
+    \\{[%clk 0:01:40.1][%timestamp 11]} 41. Rc5+ {[%clk 0:01:37][%timestamp 17]} 41...
+    \\Kf6 {[%clk 0:01:39.1][%timestamp 10]} 42. Qe4 {[%clk 0:01:28.3][%timestamp 87]}
+    \\42... Rg5 {[%clk 0:01:36.8][%timestamp 23]} 43. Rxg5 {[%clk
+    \\0:01:26.5][%timestamp 18]} 43... Kxg5 {[%clk 0:01:35.3][%timestamp 15]} 44. Qe5+
+    \\{[%clk 0:01:24.8][%timestamp 17]} 44... f5 {[%clk 0:01:33.1][%timestamp 22]} 45.
+    \\Qxe6 {[%clk 0:01:23.4][%timestamp 14]} 45... g6 {[%clk 0:01:32.4][%timestamp 7]}
+    \\46. Rb6 {[%clk 0:01:21.9][%timestamp 15]} 46... f4+ {[%clk 0:01:29.6][%timestamp
+    \\28]} 47. Kf2 {[%clk 0:01:19.8][%timestamp 21]} 47... Kh5 {[%clk
+    \\0:01:28.2][%timestamp 14]} 48. Qxg6# {[%clk 0:01:18.7][%timestamp 11]} 1-0
+;
+
 const Pieces = enum { nada, P, N, B, R, Q, K, p, n, b, r, q, k };
 
 test "print piece letters" {
@@ -135,6 +201,10 @@ const Change = struct {
     delay: usize, // tenths of a second
 };
 
+fn declare() void {
+    std.debug.print("Moves...\n", .{});
+}
+
 // object that holds the info for what was read from a PGN file
 const pgnReader = struct {
     const Self = @This();
@@ -143,26 +213,35 @@ const pgnReader = struct {
     move_list: std.ArrayList(Change),
     fn init(allocator: Allocator, contents: []const u8) !pgnReader {
         const move_list = try std.ArrayList(Change).initCapacity(allocator, 50);
-        var it = std.mem.splitSequence(u8, contents, "\r\n");
-        // var read_meta = true;
+        var it = std.mem.tokenizeScalar(u8, contents, '\n');
+        // var prev_empty = false;
         while (it.next()) |token| {
-            if (token.len == 0)
-                break;
-            std.debug.print("{}, {} tkn: {s}\n", .{token[0], token[token.len-1], switch (token[0]) {
-                    '[' => std.mem.trim(u8, token, "[]"),
-                    else => "()",
-                }
-            });
+            const tkn_peek = it.peek();
+            if (tkn_peek) |please| {
+                if (please.len > 0 and please[0] != '[')
+                    break;
+            }
+            var usize_buff = std.mem.zeroes([1024]u8);
+            std.debug.print("tkn: {s}\n", .{switch (token[0]) {
+                '[' => std.mem.trim(u8, token, "[]"),
+                else => try std.fmt.bufPrint(&usize_buff, "{}", .{token.len}),
+            }});
         }
         // make copy of the rest of contents and remove newlines (helps to have "1. " and not "1.\r\n" before a move)
-        const new_len = std.mem.replacementSize(u8, it.rest(), "\r\n", " ");
+        // const cr_len = std.mem.replacementSize(u8, it.rest(), "\r", "");
+        const new_len = std.mem.replacementSize(u8, it.rest(), "\r", "");
         const move_txt = try allocator.alloc(u8, new_len);
         defer allocator.free(move_txt);
-        _ = std.mem.replace(u8, it.rest(), "\r\n", " ", move_txt);
+        _ = std.mem.replace(u8, it.rest(), "\r", "", move_txt);
+        const in_tmp: []const u8 = move_txt;
+        _ = std.mem.replace(u8, in_tmp, "\n", " ", move_txt);
 
         // go ply by ply
         var move_it = std.mem.tokenizeSequence(u8, move_txt, ". ");
+        // idk
+        var erm = std.once(declare);
         while (move_it.next()) |tkn| {
+            erm.call();
             var move_parts_it = std.mem.tokenizeScalar(u8, tkn, ' ');
             var count: usize = 0;
             std.debug.print("\"", .{});
@@ -206,13 +285,51 @@ const pgnReader = struct {
 };
 
 test "new" {
-    const cwd = std.fs.cwd();
-    const file = try cwd.openFile("test-pgn/ex_game.txt", .{
-        .mode = .read_only,
-    });
-    defer file.close();
-    var buff: [1024]u8 = undefined;
-    std.debug.print("{}", .{try file.read(&buff)});
+    // grab file and open
+    const file = try std.fs.cwd().openFile("test-pgn/pgn_file.txt", .{});
+    var buf: [1]u8 = undefined;
+    var file_reader = file.reader(&buf); // var because you are editing the contents through file_out
+    const file_out = &file_reader.interface; // const because you aren't changing readers
+    // flags/vars to change state
+    var meta_data = true;
+    var empty_line: u8 = '?';
+    var CRLF = false;
+    // const State = enum { tag_beg, read, tag_end, str_beg, str_end, move_beg, move_end };
+    // var state = 0;
+    var phrase_start: usize = 0;
+    var count: usize = 0;
+
+    std.debug.print("\nReading file...\n", .{});
+    while (file_out.takeByte()) : (count += 1) {
+        const c = buf[0];
+        if (meta_data) {
+            if (std.ascii.isWhitespace(c)) {
+                if (empty_line == '?') {
+                    empty_line = c;
+                } else if (empty_line == c) {
+                    // doing this so that when it leaves meta_data it knows to skip the \n before moves
+                    if (empty_line == '\r')
+                        CRLF = true;
+                    meta_data = false;
+                }
+                continue;
+            } else {
+                empty_line = '?';
+            }
+            switch (c) {
+                '[' => phrase_start = count,
+                ' ', '\t'...'\r' => {},
+                ']' => break,
+            }
+        } else {
+            // switch (c) {
+            //     else => unreachable,
+            // }
+        }
+    } else |err| switch (err) {
+        .EndOfStream => std.debug.print("Finished reading\n"),
+        .ReadFailed => std.debug.print("Read failed?..\n", .{}),
+    }
 }
 
 test "read file into slice" {
@@ -238,82 +355,21 @@ test "PGN tokenize" {
     // std.mem.tokenizeScalar(comptime T: type, buffer: []const T, delimiter: T)
     // std.mem.splitScalar(comptime T: type, buffer: []const T, delimiter: T)
     // example chess game PGN with timestamps
-    const ex_pgn =
-        \\[White "Guest7527675399"]
-        \\[Black "Guest4401176224"]
-        \\[Result "1-0"]
-        \\[TimeControl "180"]
-        \\[WhiteElo "400"]
-        \\[BlackElo "400"]
-        \\[Termination "Guest7527675399 won by checkmate"]
-        \\[Link "https://www.chess.com/game/143827314072"]
-        \\
-        \\1. Nh3 {[%clk 0:02:59.1][%timestamp 9]} 1... d5 {[%clk 0:02:56.5][%timestamp
-        \\35]} 2. d3 {[%clk 0:02:58.6][%timestamp 5]} 2... Bxh3 {[%clk
-        \\0:02:54.4][%timestamp 21]} 3. gxh3 {[%clk 0:02:57.7][%timestamp 9]} 3... Qc8
-        \\{[%clk 0:02:53.4][%timestamp 10]} 4. Bg2 {[%clk 0:02:57.2][%timestamp 5]} 4...
-        \\c6 {[%clk 0:02:51.3][%timestamp 21]} 5. c4 {[%clk 0:02:56.5][%timestamp 7]} 5...
-        \\Nf6 {[%clk 0:02:48.7][%timestamp 26]} 6. cxd5 {[%clk 0:02:55.6][%timestamp 9]}
-        \\6... Nxd5 {[%clk 0:02:48.6][%timestamp 1]} 7. Bxd5 {[%clk 0:02:54.9][%timestamp
-        \\7]} 7... c5 {[%clk 0:02:47.9][%timestamp 7]} 8. Qa4+ {[%clk
-        \\0:02:53.6][%timestamp 13]} 8... Nc6 {[%clk 0:02:45.9][%timestamp 20]} 9. Bxc6+
-        \\{[%clk 0:02:52.5][%timestamp 11]} 9... bxc6 {[%clk 0:02:44.9][%timestamp 10]}
-        \\10. Nc3 {[%clk 0:02:47.6][%timestamp 49]} 10... Kd7 {[%clk 0:02:41.3][%timestamp
-        \\36]} 11. Ne4 {[%clk 0:02:46.4][%timestamp 12]} 11... e6 {[%clk
-        \\0:02:38.7][%timestamp 26]} 12. Nxc5+ {[%clk 0:02:45.4][%timestamp 10]} 12...
-        \\Bxc5 {[%clk 0:02:37.3][%timestamp 14]} 13. d4 {[%clk 0:02:42.8][%timestamp 26]}
-        \\13... Bd6 {[%clk 0:02:34.6][%timestamp 27]} 14. e4 {[%clk 0:02:41][%timestamp
-        \\18]} 14... Kc7 {[%clk 0:02:31.6][%timestamp 30]} 15. e5 {[%clk
-        \\0:02:39.7][%timestamp 13]} 15... Be7 {[%clk 0:02:30.2][%timestamp 14]} 16. Qa5+
-        \\{[%clk 0:02:36.4][%timestamp 33]} 16... Kd7 {[%clk 0:02:28.6][%timestamp 16]}
-        \\17. Bd2 {[%clk 0:02:32.8][%timestamp 36]} 17... Qb7 {[%clk 0:02:23.4][%timestamp
-        \\52]} 18. b3 {[%clk 0:02:27.6][%timestamp 52]} 18... Rab8 {[%clk
-        \\0:02:18.1][%timestamp 53]} 19. Rb1 {[%clk 0:02:20.7][%timestamp 69]} 19... Bb4
-        \\{[%clk 0:02:17.6][%timestamp 5]} 20. Bxb4 {[%clk 0:02:18.8][%timestamp 19]}
-        \\20... Qxb4+ {[%clk 0:02:16.7][%timestamp 9]} 21. Qxb4 {[%clk
-        \\0:02:16.8][%timestamp 20]} 21... Rxb4 {[%clk 0:02:16.4][%timestamp 3]} 22. Ke2
-        \\{[%clk 0:02:13.5][%timestamp 33]} 22... Rxd4 {[%clk 0:02:15][%timestamp 14]} 23.
-        \\Rhc1 {[%clk 0:02:11][%timestamp 25]} 23... Re4+ {[%clk 0:02:13.3][%timestamp
-        \\17]} 24. Kf3 {[%clk 0:02:09.1][%timestamp 19]} 24... Rxe5 {[%clk
-        \\0:02:12.5][%timestamp 8]} 25. b4 {[%clk 0:02:07.6][%timestamp 15]} 25... Rb8
-        \\{[%clk 0:02:10.6][%timestamp 19]} 26. a3 {[%clk 0:02:06.3][%timestamp 13]} 26...
-        \\Rbb5 {[%clk 0:02:09.6][%timestamp 10]} 27. a4 {[%clk 0:02:04.4][%timestamp 19]}
-        \\27... Rf5+ {[%clk 0:02:08.9][%timestamp 7]} 28. Kg3 {[%clk 0:02:02.8][%timestamp
-        \\16]} 28... Rbd5 {[%clk 0:02:06.7][%timestamp 22]} 29. f3 {[%clk
-        \\0:02:00.7][%timestamp 21]} 29... h5 {[%clk 0:02:04.5][%timestamp 22]} 30. Rc3
-        \\{[%clk 0:01:58.9][%timestamp 18]} 30... Rf6 {[%clk 0:02:03.5][%timestamp 10]}
-        \\31. Rbb3 {[%clk 0:01:57.5][%timestamp 14]} 31... Rg6+ {[%clk
-        \\0:02:02.6][%timestamp 9]} 32. Kf2 {[%clk 0:01:55][%timestamp 25]} 32... h4
-        \\{[%clk 0:02:01.4][%timestamp 12]} 33. b5 {[%clk 0:01:52.6][%timestamp 24]} 33...
-        \\Rd6 {[%clk 0:01:58.5][%timestamp 29]} 34. b6 {[%clk 0:01:50.8][%timestamp 18]}
-        \\34... a6 {[%clk 0:01:56.5][%timestamp 20]} 35. b7 {[%clk 0:01:49.7][%timestamp
-        \\11]} 35... Rd2+ {[%clk 0:01:53.3][%timestamp 32]} 36. Ke3 {[%clk
-        \\0:01:47][%timestamp 27]} 36... Rb2 {[%clk 0:01:45.7][%timestamp 76]} 37. Rxb2
-        \\{[%clk 0:01:44.7][%timestamp 23]} 37... Kc7 {[%clk 0:01:45][%timestamp 7]} 38.
-        \\b8=Q+ {[%clk 0:01:42.7][%timestamp 20]} 38... Kd7 {[%clk 0:01:43.5][%timestamp
-        \\15]} 39. Qb7+ {[%clk 0:01:39.4][%timestamp 33]} 39... Kd6 {[%clk
-        \\0:01:41.2][%timestamp 23]} 40. Qxc6+ {[%clk 0:01:38.7][%timestamp 7]} 40... Ke5
-        \\{[%clk 0:01:40.1][%timestamp 11]} 41. Rc5+ {[%clk 0:01:37][%timestamp 17]} 41...
-        \\Kf6 {[%clk 0:01:39.1][%timestamp 10]} 42. Qe4 {[%clk 0:01:28.3][%timestamp 87]}
-        \\42... Rg5 {[%clk 0:01:36.8][%timestamp 23]} 43. Rxg5 {[%clk
-        \\0:01:26.5][%timestamp 18]} 43... Kxg5 {[%clk 0:01:35.3][%timestamp 15]} 44. Qe5+
-        \\{[%clk 0:01:24.8][%timestamp 17]} 44... f5 {[%clk 0:01:33.1][%timestamp 22]} 45.
-        \\Qxe6 {[%clk 0:01:23.4][%timestamp 14]} 45... g6 {[%clk 0:01:32.4][%timestamp 7]}
-        \\46. Rb6 {[%clk 0:01:21.9][%timestamp 15]} 46... f4+ {[%clk 0:01:29.6][%timestamp
-        \\28]} 47. Kf2 {[%clk 0:01:19.8][%timestamp 21]} 47... Kh5 {[%clk
-        \\0:01:28.2][%timestamp 14]} 48. Qxg6# {[%clk 0:01:18.7][%timestamp 11]} 1-0
-    ;
+
     // reads the meta data
     var it = std.mem.splitSequence(u8, ex_pgn[0..], "\n");
     // var read_meta = true;
     token_loop: while (it.next()) |token| {
-        std.debug.print("tkn: {s}{any}\n", .{if (token.len > 0) switch (token[0]) {
-            '[' => std.mem.trim(u8, token, "[]"),
-            else => "()",
-        } else { // empty line indicates moves are to now be read
-            // read_meta = false;
-            break :token_loop;
-        }, token});
+        std.debug.print("tkn: {s}{any}\n", .{
+            if (token.len > 0) switch (token[0]) {
+                '[' => std.mem.trim(u8, token, "[]"),
+                else => "()",
+            } else { // empty line indicates moves are to now be read
+                // read_meta = false;
+                break :token_loop;
+            },
+            token,
+        });
     }
     // read move data
     const move_txt = try std.mem.Allocator.dupe(std.testing.allocator, u8, it.rest());
