@@ -159,36 +159,14 @@ test "print chess" {
 // https://www.saremba.de/chessgml/standards/pgn/pgn-complete.htm
 const Game = struct {
     const Self = @This();
-    white: []const u8,
-    black: []const u8,
-    result: []const u8,
-    time: u32, // seconds
-    increment: u32, // seconds
-    clock: [2]u32, // 10ths of a second
+    white: []const u8 = "Player 1",
+    black: []const u8 = "Player 2",
+    result: []const u8 = "Draw",
+    time: u32 = 60, // seconds
+    increment: u32 = 0, // seconds
+    clock: [2]u32 = .{ 600, 600 }, // 10ths of a second
     board: [64]u8 = "RNBQKBNRPPPPPPPP................................pppppppprnbqkbnr".*,
-    flip: bool,
-    // default if not provided
-    const Args = struct {
-        w: []const u8 = "Player 1",
-        b: []const u8 = "Player 2",
-        res: []const u8 = "draw",
-        time: u32 = 60,
-        inc: u32 = 0,
-        clock: [2]u32 = .{ 600, 600 },
-        flip: bool = false,
-    };
-    fn init(args: Args) Game {
-        return .{
-            .white = args.w,
-            .black = args.b,
-            .result = args.res,
-            .time = args.time,
-            .increment = args.inc,
-            .clock = [1]u32{args.time * 10} ** 2,
-            .flip = args.flip,
-        };
-        // return ans;
-    }
+    flip: bool = false,
 };
 
 // for the purposes of updating the screen
@@ -213,19 +191,26 @@ const pgnReader = struct {
     move_list: std.ArrayList(Change),
     fn init(allocator: Allocator, contents: []const u8) !pgnReader {
         const move_list = try std.ArrayList(Change).initCapacity(allocator, 50);
-        var it = std.mem.tokenizeScalar(u8, contents, '\n');
+        var game = Game{};
+        game.flip = true;
+        // var it = std.mem.tokenizeScalar(u8, contents, '\n');
+        const file = try std.fs.cwd().openFile(contents, .{});
+        defer file.close();
+        file.reader(buffer: []u8)
+        const contents = try allocator.alloc(u8, (try file.stat()).size);
+        std.fs.File.reader(file: File, buffer: []u8)
         // var prev_empty = false;
-        while (it.next()) |token| {
-            const tkn_peek = it.peek();
-            if (tkn_peek) |please| {
-                if (please.len > 0 and please[0] != '[')
-                    break;
+        while (true) {
+            _ = try file_out.discardDelimiterInclusive('[');
+            std.debug.print("{s} ", .{try data.read_tag(file_out)});
+            _ = try file_out.discardDelimiterInclusive('"');
+            std.debug.print("{s} ", .{try data.read_value(file_out)});
+            _ = try file_out.discardDelimiterInclusive('\n');
+            const next_line = try file_out.peekDelimiterExclusive('\n');
+            std.debug.print("\n(next has {} characters)\n", .{next_line.len});
+            if (next_line.len <= 1) {
+                break;
             }
-            var usize_buff = std.mem.zeroes([1024]u8);
-            std.debug.print("tkn: {s}\n", .{switch (token[0]) {
-                '[' => std.mem.trim(u8, token, "[]"),
-                else => try std.fmt.bufPrint(&usize_buff, "{}", .{token.len}),
-            }});
         }
         // make copy of the rest of contents and remove newlines (helps to have "1. " and not "1.\r\n" before a move)
         // const cr_len = std.mem.replacementSize(u8, it.rest(), "\r", "");
@@ -271,11 +256,9 @@ const pgnReader = struct {
             }
             std.debug.print("\"\n", .{});
         }
-        var args: Game.Args = .{};
-        args.flip = true;
         return .{
             .allocator = allocator,
-            .game_info = Game.init(args),
+            .game_info = game,
             .move_list = move_list,
         };
     }
@@ -286,50 +269,49 @@ const pgnReader = struct {
 
 test "new" {
     // grab file and open
-    const file = try std.fs.cwd().openFile("test-pgn/pgn_file.txt", .{});
-    var buf: [1]u8 = undefined;
+    const file = try std.fs.cwd().openFile("test-pgn/ex_game.txt", .{});
+    var buf: [1024]u8 = undefined;
     var file_reader = file.reader(&buf); // var because you are editing the contents through file_out
     const file_out = &file_reader.interface; // const because you aren't changing readers
-    // flags/vars to change state
-    var meta_data = true;
-    var empty_line: u8 = '?';
-    var CRLF = false;
-    // const State = enum { tag_beg, read, tag_end, str_beg, str_end, move_beg, move_end };
-    // var state = 0;
-    var phrase_start: usize = 0;
-    var count: usize = 0;
 
-    std.debug.print("\nReading file...\n", .{});
-    while (file_out.takeByte()) : (count += 1) {
-        const c = buf[0];
-        if (meta_data) {
-            if (std.ascii.isWhitespace(c)) {
-                if (empty_line == '?') {
-                    empty_line = c;
-                } else if (empty_line == c) {
-                    // doing this so that when it leaves meta_data it knows to skip the \n before moves
-                    if (empty_line == '\r')
-                        CRLF = true;
-                    meta_data = false;
-                }
-                continue;
-            } else {
-                empty_line = '?';
-            }
-            switch (c) {
-                '[' => phrase_start = count,
-                ' ', '\t'...'\r' => {},
-                ']' => break,
-            }
-        } else {
-            // switch (c) {
-            //     else => unreachable,
-            // }
+    const Meta = struct {
+        const Self = @This();
+        tag: []const u8,
+        value: []const u8,
+        end: bool,
+        const empty: Self = .{
+            .tag = &.{},
+            .value = &.{},
+            .end = false,
+        };
+        fn read_tag(self: *Self, reader: *std.Io.Reader) ![]const u8 {
+            const erm: []const u8 = try reader.peekDelimiterExclusive(' ');
+            self.tag = erm;
+            return erm;
         }
-    } else |err| switch (err) {
-        .EndOfStream => std.debug.print("Finished reading\n"),
-        .ReadFailed => std.debug.print("Read failed?..\n", .{}),
+        fn read_value(self: *Self, reader: *std.Io.Reader) ![]const u8 {
+            const tmp: []const u8 = try reader.peekDelimiterExclusive('"');
+            self.value = tmp;
+            return tmp;
+        }
+    };
+
+    // read tags and values
+    var data = Meta.empty;
+    std.debug.print("\nReading file...\n", .{});
+    while (true) {
+        _ = try file_out.discardDelimiterInclusive('[');
+        std.debug.print("{s} ", .{try data.read_tag(file_out)});
+        _ = try file_out.discardDelimiterInclusive('"');
+        std.debug.print("{s} ", .{try data.read_value(file_out)});
+        _ = try file_out.discardDelimiterInclusive('\n');
+        const next_line = try file_out.peekDelimiterExclusive('\n');
+        std.debug.print("\n(next has {} characters)\n", .{next_line.len});
+        if (next_line.len <= 1) {
+            break;
+        }
     }
+    std.debug.print("what is left in buffer:{s}\n", .{file_out.buffered()});
 }
 
 test "read file into slice" {
@@ -439,20 +421,20 @@ pub fn main() !void {
         return;
     }
 
-    const cwd = std.fs.cwd();
-    const file = try cwd.openFile(fname, .{
-        .mode = .read_only,
-    });
-    defer file.close();
-    // find out the size in bytes
-    const stats = try file.stat();
-    std.debug.print("file is {} bytes?\n", .{stats.size});
-    // read after knowing the size
-    const content = try allocator.alloc(u8, stats.size);
-    defer allocator.free(content);
-    _ = try cwd.readFile(fname, content);
-    std.debug.print("{s}\nWow! Incredible!\n", .{content});
+    // const cwd = std.fs.cwd();
+    // const file = try cwd.openFile(fname, .{
+    //     .mode = .read_only,
+    // });
+    // defer file.close();
+    // // find out the size in bytes
+    // const stats = try file.stat();
+    // std.debug.print("file is {} bytes?\n", .{stats.size});
+    // // read after knowing the size
+    // const content = try allocator.alloc(u8, stats.size);
+    // defer allocator.free(content);
+    // _ = try cwd.readFile(fname, content);
+    // std.debug.print("{s}\nWow! Incredible!\n", .{content});
 
-    var my_pgn = try pgnReader.init(allocator, content);
+    var my_pgn = try pgnReader.init(allocator, "qwe");
     defer my_pgn.deinit();
 }
