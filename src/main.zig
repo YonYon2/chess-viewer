@@ -171,16 +171,43 @@ const Game = struct {
 
 // for the purposes of updating the screen
 const Change = struct {
-    from: Square,
-    to: Square,
-    mover: Piece,
-    replace: ?Piece,
-    promote: ?Piece,
-    delay: usize, // tenths of a second
+    from: Square = .default,
+    to: Square = .default,
+    mover: Pieces = .nada,
+    replace: ?Pieces = null,
+    promote: ?Pieces = null,
+    delay: u32 = 1, // tenths of a second
 };
 
 fn declare() void {
     std.debug.print("Moves...\n", .{});
+}
+
+fn StringBuf(comptime L: usize) type {
+    return struct {
+        const Self = @This();
+        buffer: [L]u8,
+        seek: usize,
+        pub fn init() Self {
+            return .{
+                .buffer = [1]u8{0} ** L,
+                .seek = 0,
+            };
+        }
+        pub fn append(self: *Self, character: u8) !void {
+            if (self.seek >= L) {
+                return error.NoSpace;
+            }
+            self.buffer[self.seek] = character;
+            self.seek += 1;
+        }
+        pub fn flush(self: *Self) void {
+            for (self.buffer) |*a| {
+                a = 0;
+            }
+            self.seek = 0;
+        }
+    };
 }
 
 // object that holds the info for what was read from a PGN file
@@ -190,80 +217,193 @@ const pgnReader = struct {
     game_info: Game,
     move_list: std.ArrayList(Change),
     fn init(allocator: Allocator, contents: []const u8) !pgnReader {
-        const move_list = try std.ArrayList(Change).initCapacity(allocator, 50);
+        var move_list = try std.ArrayList(Change).initCapacity(allocator, 50);
         var game = Game{};
         game.flip = true;
         // var it = std.mem.tokenizeScalar(u8, contents, '\n');
-        const file = try std.fs.cwd().openFile(contents, .{});
+        var file = try std.fs.cwd().openFile(contents, .{});
         defer file.close();
-        file.reader(buffer: []u8)
-        const contents = try allocator.alloc(u8, (try file.stat()).size);
-        std.fs.File.reader(file: File, buffer: []u8)
-        // var prev_empty = false;
+        // hold entire file
+        const data = try allocator.alloc(u8, (try file.stat()).size);
+        defer allocator.free(data);
+        var file_reader = file.reader(data);
+        const file_out = &file_reader.interface;
+
+        var tag_name: []const u8 = &.{};
+        var value: []const u8 = &.{};
+        const tags = [_][]const u8{ "White", "Black", "Result", "TimeControl", "WhiteElo", "BlackElo", "Termination" };
         while (true) {
             _ = try file_out.discardDelimiterInclusive('[');
-            std.debug.print("{s} ", .{try data.read_tag(file_out)});
+            tag_name = try file_out.peekDelimiterExclusive(' ');
             _ = try file_out.discardDelimiterInclusive('"');
-            std.debug.print("{s} ", .{try data.read_value(file_out)});
+            value = try file_out.peekDelimiterExclusive('"');
             _ = try file_out.discardDelimiterInclusive('\n');
+            for (tags, 0..) |tag, i| {
+                if (std.mem.eql(u8, tag, tag_name)) {
+                    switch (i) {
+                        0 => game.white = value,
+                        1 => game.black = value,
+                        2 => game.result = value,
+                        3 => {
+                            var time_it = std.mem.tokenizeScalar(u8, value, '+');
+                            if (time_it.next()) |clock| {
+                                game.time = try std.fmt.parseUnsigned(u32, clock, 10);
+                                game.clock = [1]u32{game.time * 10} ** 2;
+                            }
+                            if (time_it.next()) |inc| {
+                                game.increment = try std.fmt.parseUnsigned(u32, inc, 10);
+                            }
+                        },
+                        else => {},
+                    }
+                }
+            }
             const next_line = try file_out.peekDelimiterExclusive('\n');
             std.debug.print("\n(next has {} characters)\n", .{next_line.len});
             if (next_line.len <= 1) {
                 break;
             }
         }
-        // make copy of the rest of contents and remove newlines (helps to have "1. " and not "1.\r\n" before a move)
-        // const cr_len = std.mem.replacementSize(u8, it.rest(), "\r", "");
-        const new_len = std.mem.replacementSize(u8, it.rest(), "\r", "");
-        const move_txt = try allocator.alloc(u8, new_len);
-        defer allocator.free(move_txt);
-        _ = std.mem.replace(u8, it.rest(), "\r", "", move_txt);
-        const in_tmp: []const u8 = move_txt;
-        _ = std.mem.replace(u8, in_tmp, "\n", " ", move_txt);
-
-        // go ply by ply
-        var move_it = std.mem.tokenizeSequence(u8, move_txt, ". ");
-        // idk
-        var erm = std.once(declare);
-        while (move_it.next()) |tkn| {
-            erm.call();
-            var move_parts_it = std.mem.tokenizeScalar(u8, tkn, ' ');
-            var count: usize = 0;
-            std.debug.print("\"", .{});
-            while (move_parts_it.next()) |tkn_part| : (count += 1) {
-                switch (count) {
-                    0 => {
-                        // const move = std.mem.trimEnd(u8, tkn_part, "0123456789. ");
-                        std.debug.print("{s}", .{tkn_part});
-                    },
-                    2 => {
-                        var clock = std.mem.zeroes([1024]u8);
-                        const cutOff = std.mem.indexOfNone(u8, tkn_part, "0123456789:.").?;
-                        _ = try std.fmt.bufPrint(&clock, "{s}", .{tkn_part[0..cutOff]});
-                        std.debug.print(" {s}", .{clock});
-                    },
-                    3 => {
-                        const wait = std.fmt.parseUnsigned(usize, std.mem.trim(u8, tkn_part, "]} "), 10) catch blk: {
-                            std.debug.print(" Invalid timestamp!", .{});
-                            break :blk 1;
-                        };
-                        std.debug.print(" {}", .{wait});
-                    },
-                    else => {
-                        // show = false;
-                    },
-                }
+        const remaining_file = file_out.buffered();
+        // view by character and piece together Change item to add to the move list
+        var is_white = true;
+        var start_index: usize = 0;
+        var start_read = false;
+        const Modes = enum { move_number, move, clock, timestamp };
+        var mode = Modes.move_number;
+        for (remaining_file, 0..) |c, i| {
+            switch (mode) {
+                .move_number => {
+                    if (std.ascii.isWhitespace(c))
+                        continue;
+                    if (c == '.')
+                        mode = .move;
+                },
+                .move => {
+                    if (!start_read) {
+                        if (c == '.' or std.ascii.isWhitespace(c))
+                            continue;
+                        start_index = i;
+                        start_read = true;
+                    } else {
+                        if (std.ascii.isWhitespace(c)) {
+                            const move_text = remaining_file[start_index..i];
+                            const move_piece = switch (move_text[0]) {
+                                'K' => if (is_white) Pieces.K else Pieces.k,
+                                'Q' => if (is_white) Pieces.Q else Pieces.q,
+                                'R' => if (is_white) Pieces.R else Pieces.r,
+                                'B' => if (is_white) Pieces.B else Pieces.b,
+                                'N' => if (is_white) Pieces.N else Pieces.n,
+                                else => if (is_white) Pieces.P else Pieces.p,
+                            };
+                            try move_list.append(allocator, .{ .mover = move_piece });
+                            std.debug.print("{s} ", .{move_text});
+                            start_read = false;
+                            mode = .clock;
+                        }
+                    }
+                },
+                .clock => {
+                    if (!start_read) {
+                        if (std.ascii.isDigit(c)) {
+                            start_index = i;
+                            start_read = true;
+                        }
+                    } else {
+                        if (c == ']') {
+                            const clock_text = remaining_file[start_index..i];
+                            std.debug.print("{s} ", .{clock_text});
+                            start_read = false;
+                            mode = .timestamp;
+                        }
+                    }
+                },
+                .timestamp => {
+                    if (!start_read) {
+                        if (std.ascii.isDigit(c)) {
+                            start_index = i;
+                            start_read = true;
+                        }
+                    } else {
+                        if (c == ']') {
+                            const timestamp_number = try std.fmt.parseUnsigned(u32, remaining_file[start_index..i], 10);
+                            std.debug.print("{}\n", .{timestamp_number});
+                            start_read = false;
+                            is_white = !is_white;
+                            mode = .move_number;
+                        }
+                    }
+                },
             }
-            std.debug.print("\"\n", .{});
         }
+        // std.debug.print("WHAT IS LEFT:{s}\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n", .{remaining_file});
+        // std.debug.print("{any}\n", .{game});
+        // // make copy of the rest of contents and remove newlines (helps to have "1. " and not "1.\r\n" before a move)
+        // // const cr_len = std.mem.replacementSize(u8, it.rest(), "\r", "");
+        // const new_len = std.mem.replacementSize(u8, remaining_file, "\r", "");
+        // const move_txt = try allocator.alloc(u8, new_len);
+        // defer allocator.free(move_txt);
+        // _ = std.mem.replace(u8, remaining_file, "\r", "", move_txt);
+        // const in_tmp: []const u8 = move_txt;
+        // _ = std.mem.replace(u8, in_tmp, "\n", " ", move_txt);
+
+        // // go ply by ply
+        // var move_it = std.mem.tokenizeSequence(u8, move_txt, ". ");
+        // // idk
+        // var erm = std.once(declare);
+        // while (move_it.next()) |tkn| {
+        //     erm.call();
+        //     var move_parts_it = std.mem.tokenizeScalar(u8, tkn, ' ');
+        //     var count: usize = 0;
+        //     std.debug.print("\"", .{});
+        //     while (move_parts_it.next()) |tkn_part| : (count += 1) {
+        //         switch (count) {
+        //             0 => {
+        //                 // const move = std.mem.trimEnd(u8, tkn_part, "0123456789. ");
+        //                 std.debug.print("{s}", .{tkn_part});
+        //             },
+        //             2 => {
+        //                 var clock = std.mem.zeroes([1024]u8);
+        //                 const cutOff = std.mem.indexOfNone(u8, tkn_part, "0123456789:.").?;
+        //                 _ = try std.fmt.bufPrint(&clock, "{s}", .{tkn_part[0..cutOff]});
+        //                 std.debug.print(" {s}", .{clock});
+        //             },
+        //             3 => {
+        //                 const wait = std.fmt.parseUnsigned(usize, std.mem.trim(u8, tkn_part, "]} "), 10) catch blk: {
+        //                     std.debug.print(" Invalid timestamp!", .{});
+        //                     break :blk 1;
+        //                 };
+        //                 std.debug.print(" {}", .{wait});
+        //             },
+        //             else => {
+        //                 // show = false;
+        //             },
+        //         }
+        //     }
+        //     std.debug.print("\"\n", .{});
+        // }
+        std.debug.print("{} plies! {} moves!\n", .{ move_list.items.len, move_list.items.len / 2 });
         return .{
             .allocator = allocator,
             .game_info = game,
-            .move_list = move_list,
+            .move_list = move_list, //move_list,
         };
     }
     fn deinit(self: *Self) void {
         self.move_list.deinit(self.allocator);
+    }
+};
+
+const Met = struct {
+    gg: bool,
+    fn init(allocator: std.mem.Allocator, fname: []const u8) !Met {
+        _ = allocator;
+        const cwd = std.fs.cwd();
+        const file = try cwd.openFile(fname, .{});
+        defer file.close();
+        return .{
+            .gg = false,
+        };
     }
 };
 
@@ -434,7 +574,7 @@ pub fn main() !void {
     // defer allocator.free(content);
     // _ = try cwd.readFile(fname, content);
     // std.debug.print("{s}\nWow! Incredible!\n", .{content});
-
-    var my_pgn = try pgnReader.init(allocator, "qwe");
+    // const mm = Met.init(allocator, "test-pgn")
+    var my_pgn = try pgnReader.init(allocator, fname);
     defer my_pgn.deinit();
 }
