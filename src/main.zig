@@ -135,10 +135,6 @@ const Player = struct {
     // }
 };
 
-test "player" {
-    const p = Player.init(true);
-    std.debug.print("{any}\n", .{p.knight});
-}
 // meep
 const Move = struct {
     piece: Pieces,
@@ -179,37 +175,6 @@ const Change = struct {
     delay: u32 = 1, // tenths of a second
 };
 
-fn declare() void {
-    std.debug.print("Moves...\n", .{});
-}
-
-fn StringBuf(comptime L: usize) type {
-    return struct {
-        const Self = @This();
-        buffer: [L]u8,
-        seek: usize,
-        pub fn init() Self {
-            return .{
-                .buffer = [1]u8{0} ** L,
-                .seek = 0,
-            };
-        }
-        pub fn append(self: *Self, character: u8) !void {
-            if (self.seek >= L) {
-                return error.NoSpace;
-            }
-            self.buffer[self.seek] = character;
-            self.seek += 1;
-        }
-        pub fn flush(self: *Self) void {
-            for (self.buffer) |*a| {
-                a = 0;
-            }
-            self.seek = 0;
-        }
-    };
-}
-
 // object that holds the info for what was read from a PGN file
 const pgnReader = struct {
     const Self = @This();
@@ -220,7 +185,7 @@ const pgnReader = struct {
         var move_list = try std.ArrayList(Change).initCapacity(allocator, 50);
         var game = Game{};
         game.flip = true;
-        // var it = std.mem.tokenizeScalar(u8, contents, '\n');
+
         var file = try std.fs.cwd().openFile(contents, .{});
         defer file.close();
         // hold entire file
@@ -336,8 +301,6 @@ const pgnReader = struct {
                 },
             }
         }
-        // std.debug.print("WHAT IS LEFT:{s}\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n", .{remaining_file});
-        // std.debug.print("{any}\n", .{game});
         // // make copy of the rest of contents and remove newlines (helps to have "1. " and not "1.\r\n" before a move)
         // // const cr_len = std.mem.replacementSize(u8, it.rest(), "\r", "");
         // const new_len = std.mem.replacementSize(u8, remaining_file, "\r", "");
@@ -391,19 +354,6 @@ const pgnReader = struct {
     }
     fn deinit(self: *Self) void {
         self.move_list.deinit(self.allocator);
-    }
-};
-
-const Met = struct {
-    gg: bool,
-    fn init(allocator: std.mem.Allocator, fname: []const u8) !Met {
-        _ = allocator;
-        const cwd = std.fs.cwd();
-        const file = try cwd.openFile(fname, .{});
-        defer file.close();
-        return .{
-            .gg = false,
-        };
     }
 };
 
@@ -533,15 +483,6 @@ test "PGN tokenize" {
 }
 
 // PGN reader
-// <piece letter><coordinate>
-// Captures (Bxe6)
-// Disambiguating moves
-// Pawn promotion (e8=Q)
-// Castling 'O-O' or 'O-O-O'
-// Check '+'
-// Checkmate '#'
-//
-
 pub fn main() !void {
     var gpa = std.heap.DebugAllocator(.{}).init;
     defer _ = gpa.deinit();
@@ -561,20 +502,6 @@ pub fn main() !void {
         return;
     }
 
-    // const cwd = std.fs.cwd();
-    // const file = try cwd.openFile(fname, .{
-    //     .mode = .read_only,
-    // });
-    // defer file.close();
-    // // find out the size in bytes
-    // const stats = try file.stat();
-    // std.debug.print("file is {} bytes?\n", .{stats.size});
-    // // read after knowing the size
-    // const content = try allocator.alloc(u8, stats.size);
-    // defer allocator.free(content);
-    // _ = try cwd.readFile(fname, content);
-    // std.debug.print("{s}\nWow! Incredible!\n", .{content});
-    // const mm = Met.init(allocator, "test-pgn")
     var my_pgn = try pgnReader.init(allocator, fname);
     defer my_pgn.deinit();
 }
