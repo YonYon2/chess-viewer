@@ -246,6 +246,7 @@ const pgnReader = struct {
         var start_read = false;
         const Modes = enum { move_number, move, clock, timestamp };
         var mode = Modes.move_number;
+        var players = [_]Player{ .init(false), .init(true) };
         for (remaining_file, 0..) |c, i| {
             switch (mode) {
                 .move_number => {
@@ -311,9 +312,38 @@ const pgnReader = struct {
                             if (sqr2) |_| {
                                 hold_change.from = sqr1;
                             }
+                            
+                            // var from = Square.default;
+                            // find which pawn we moving
+                            if (move_piece == .P or move_piece == .p) {
+                                // d4, bxc5, a1=Q
+                                const attack = move_text[1] == 'x';
+                                const file_from = move_text[0]; // regardless if its an attack, the first character is the originating file
+                                // const file_to = if (attack) move_text[2] else ('a'-1);
+                                // const rank = if (attack) move_text[3] else move_text[1];
+                                for (players[@intFromBool(is_white)].pawn) |*p| {
+                                    if (p.alive and p.square.file == @as(u3, file_from - 'a')) {
+                                        const next_rank: u3 = @truncate(move_text[if (attack) 3 else 1] - '1');
+                                        const is_negative = p.square.rank > next_rank;
+                                        const dist = if (is_negative) p.square.rank - next_rank else next_rank - p.square.rank;
+                                        if (dist == 1) {
+                                            // this the one!
+                                            if (is_negative) {
+                                                p.square.rank -= 1;
+                                            } else {
+                                                p.square.rank += 1;
+                                            }
+                                            if (attack) {
+                                                p.square.file = move_text[2];
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                             // add move
                             try move_list.append(allocator, hold_change);
-                            std.debug.print("{any} ", .{hold_change});
+                            // std.debug.print("{any} ", .{hold_change});
+                            std.debug.print("{s} ", .{move_text});
                             start_read = false;
                             mode = .clock;
                         }
