@@ -68,6 +68,10 @@ const ex_pgn =
 ;
 
 const Pieces = enum { nada, P, N, B, R, Q, K, p, n, b, r, q, k };
+// x = +
+// x = #
+// O-O +
+// O-O #
 
 test "print piece letters" {
     std.debug.print("\nbegin\n", .{});
@@ -172,6 +176,7 @@ const Change = struct {
     mover: Pieces = .nada,
     replace: Pieces = .nada,
     promote: Pieces = .nada,
+    castle: ?struct { from: Square = .default, to: Square = .default } = null,
     // clock: []const u8 = &.{},
     delay: u32 = 1, // tenths of a second
 };
@@ -264,14 +269,26 @@ const pgnReader = struct {
                     } else {
                         if (std.ascii.isWhitespace(c)) {
                             const move_text = remaining_file[start_index..i];
+                            var is_castle_long: ?bool = null;
                             const move_piece = switch (move_text[0]) {
                                 'K' => if (is_white) Pieces.K else Pieces.k,
                                 'Q' => if (is_white) Pieces.Q else Pieces.q,
                                 'R' => if (is_white) Pieces.R else Pieces.r,
                                 'B' => if (is_white) Pieces.B else Pieces.b,
                                 'N' => if (is_white) Pieces.N else Pieces.n,
+                                'O' => {
+                                    is_castle_long = move_text.len >= 5; //O-O >=3, O-O-O >=5
+                                    break if (is_white) Pieces.K else Pieces.k;
+                                },
                                 else => if (is_white) Pieces.P else Pieces.p,
                             };
+                            var hold_change = Change{ .mover = move_piece };
+                            if (is_castle_long) |L| {
+                                // figure out if it's short or long
+                                hold_change.castle = .{};
+                            } else {
+                                // mean to put everything below this inside here if it is not a castle move
+                            }
                             // disambiguating moves:
                             // type 1: <piece letter><originating file><destination square> Nbe2
                             // type 2: <piece letter><originating rank><destination square> N2g3
@@ -281,10 +298,16 @@ const pgnReader = struct {
                             const sqr_sec_end = std.mem.indexOfNone(u8, move_text, "KQRNBabcdefgh12345678x");
                             const sqr_sec = if (sqr_sec_end) |end| move_text[1..end] else move_text[1..];
                             // have room to potentially read 1-2 squares
+                            const SqrStatus = enum { normal, file_disambig, rank_disambig, both_disambig };
+                            var is_attack = false;
+                            var is_check = false;
+                            var is_checkmate = false;
+                            var is_promotion = false;
                             var grabbed_file = false;
                             var grabbed_rank = false;
                             var sqr1 = Square.default;
                             var sqr2 = Square.default;
+                            // bxc5: b5, c5
                             for (sqr_sec) |ch| {
                                 if (ch >= 'a' and ch <= 'h') {
                                     if (!grabbed_file) {
@@ -303,16 +326,15 @@ const pgnReader = struct {
                                         sqr2.rank = @truncate(ch - '1');
                                     }
                                     // sqr2 = Square{ .file = sqr1.file, .rank = sqr1.rank };
+                                } else if (ch == 'x') {
+                                    is_attack = true;
                                 }
                             }
                             // if disambig., sqr1 is 'to' and sqr2 is 'from', else sqr1 is 'to'
-                            var hold_change = Change{ .mover = move_piece, .to = if (sqr2) |s| s else sqr1 };
-                            // TODO right here is where a GameReference would be needed to figure out the 'from' square
-                            // by checking which piece on the board we are talking about
                             if (sqr2) |_| {
                                 hold_change.from = sqr1;
                             }
-                            
+
                             // var from = Square.default;
                             // find which pawn we moving
                             if (move_piece == .P or move_piece == .p) {
