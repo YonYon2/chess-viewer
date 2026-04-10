@@ -170,10 +170,20 @@ const Change = struct {
     from: Square = .default,
     to: Square = .default,
     mover: Pieces = .nada,
-    replace: ?Pieces = null,
-    promote: ?Pieces = null,
+    replace: Pieces = .nada,
+    promote: Pieces = .nada,
+    // clock: []const u8 = &.{},
     delay: u32 = 1, // tenths of a second
 };
+// piece that moves always leaves behind a blank tile
+
+test "slice of a slice" {
+    const yup = "yup";
+    // const y = yup[0..];
+    const yslice: []const u8 = yup;
+    const z = yslice[1..2];
+    std.debug.print("{s}", .{@typeName(@TypeOf(z))});
+}
 
 // object that holds the info for what was read from a PGN file
 const pgnReader = struct {
@@ -261,14 +271,55 @@ const pgnReader = struct {
                                 'N' => if (is_white) Pieces.N else Pieces.n,
                                 else => if (is_white) Pieces.P else Pieces.p,
                             };
-                            try move_list.append(allocator, .{ .mover = move_piece });
-                            std.debug.print("{s} ", .{move_text});
+                            // disambiguating moves:
+                            // type 1: <piece letter><originating file><destination square> Nbe2
+                            // type 2: <piece letter><originating rank><destination square> N2g3
+                            // type 3: <piece letter><originating square><destination square> Nb1c3
+                            // first 4 (5 if take 'x' separates) characters are potentially files/ranks/square+destination square
+                            // distinguished by originating ranks
+                            const sqr_sec_end = std.mem.indexOfNone(u8, move_text, "KQRNBabcdefgh12345678x");
+                            const sqr_sec = if (sqr_sec_end) |end| move_text[1..end] else move_text[1..];
+                            // have room to potentially read 1-2 squares
+                            var grabbed_file = false;
+                            var grabbed_rank = false;
+                            var sqr1 = Square.default;
+                            var sqr2 = Square.default;
+                            for (sqr_sec) |ch| {
+                                if (ch >= 'a' and ch <= 'h') {
+                                    if (!grabbed_file) {
+                                        sqr1.file = @truncate(ch - 'a');
+                                        sqr2.file = sqr1.file;
+                                        grabbed_file = true;
+                                    } else {
+                                        sqr2.file = @truncate(ch - 'a');
+                                    }
+                                } else if (ch >= '1' and ch <= '8') {
+                                    if (!grabbed_rank) {
+                                        sqr1.rank = @truncate(ch - '1');
+                                        sqr2.rank = sqr1.rank;
+                                        grabbed_rank = true;
+                                    } else {
+                                        sqr2.rank = @truncate(ch - '1');
+                                    }
+                                    // sqr2 = Square{ .file = sqr1.file, .rank = sqr1.rank };
+                                }
+                            }
+                            // if disambig., sqr1 is 'to' and sqr2 is 'from', else sqr1 is 'to'
+                            var hold_change = Change{ .mover = move_piece, .to = if (sqr2) |s| s else sqr1 };
+                            // TODO right here is where a GameReference would be needed to figure out the 'from' square
+                            // by checking which piece on the board we are talking about
+                            if (sqr2) |_| {
+                                hold_change.from = sqr1;
+                            }
+                            // add move
+                            try move_list.append(allocator, hold_change);
+                            std.debug.print("{any} ", .{hold_change});
                             start_read = false;
                             mode = .clock;
                         }
                     }
                 },
-                .clock => {
+                .clock => { // for now can be ignored
                     if (!start_read) {
                         if (std.ascii.isDigit(c)) {
                             start_index = i;
