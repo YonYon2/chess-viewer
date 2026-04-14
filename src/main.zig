@@ -67,7 +67,21 @@ const ex_pgn =
     \\0:01:28.2][%timestamp 14]} 48. Qxg6# {[%clk 0:01:18.7][%timestamp 11]} 1-0
 ;
 
-const Pieces = enum { nada, P, N, B, R, Q, K, p, n, b, r, q, k };
+const Pieces = enum(u8) {
+    nada = '.', 
+    P = 'P', 
+    N = 'N', 
+    B = 'B', 
+    R = 'R', 
+    Q = 'Q', 
+    K = 'K', 
+    p = 'p', 
+    n = 'n', 
+    b = 'b', 
+    r = 'r', 
+    q = 'q', 
+    k = 'k'
+};
 // x = +
 // x = #
 // O-O +
@@ -114,6 +128,17 @@ const Player = struct {
     rook: [10]Piece,
     queen: [9]Piece,
     king: Piece,
+    board: [64]u8 = "RNBQKBNRPPPPPPPP................................pppppppprnbqkbnr".*,
+    // used for position reference to quickly figure out what is being replaced
+    // TODO get rid of all this big array schtuff and only work based on this array of enums
+    // TODO each player can't have their own board bruv
+    board_enum: [64]Pieces = blk: {
+        var result = [1]Pieces{.nada} ** 64;
+        for ("RNBQKBNRPPPPPPPP................................pppppppprnbqkbnr", 0..) |c, i| {
+            result[i] = @enumFromInt(c);
+        }
+        break :blk result;
+    },
     fn init(comptime first: bool) Player {
         const pawn_rank: u3 = if (first) 1 else 6;
         const main_rank: u3 = if (first) 0 else 7;
@@ -178,8 +203,18 @@ const Change = struct {
     promote: Pieces = .nada,
     castle: ?struct { from: Square = .default, to: Square = .default } = null,
     // clock: []const u8 = &.{},
+    check: bool = false, // will be used to highlight the opposing king 
     delay: u32 = 1, // tenths of a second
 };
+// order of iterating through changes: 
+// 1. read `delay`
+// 2. wait for `delay` time elapsed
+// 3. update clock each 1s or each 0.1s if less than 20s
+// 4. update from/to pieces
+// 5. update from/to bg colors
+// 5. update check bg highlight
+// 6. advance to next change
+
 // piece that moves always leaves behind a blank tile
 
 test "slice of a slice" {
@@ -188,6 +223,11 @@ test "slice of a slice" {
     const yslice: []const u8 = yup;
     const z = yslice[1..2];
     std.debug.print("{s}", .{@typeName(@TypeOf(z))});
+}
+
+test "pieces enum" {
+    // const p = Pieces.B;
+    std.debug.print("\n{c}\n", .{@typeInfo(Pieces).@"enum".fields[0].value});
 }
 
 // object that holds the info for what was read from a PGN file
@@ -246,12 +286,11 @@ const pgnReader = struct {
         }
         const remaining_file = file_out.buffered();
         // view by character and piece together Change item to add to the move list
-        var is_white = true;
-        var start_index: usize = 0;
-        var start_read = false;
+        var is_white, var start_index: usize, var start_read = .{true, 0, false};
         const Modes = enum { move_number, move, clock, timestamp };
         var mode = Modes.move_number;
-        var players = [_]Player{ .init(false), .init(true) };
+        // needs to be a var
+        const players = [_]Player{ .init(false), .init(true) };
         for (remaining_file, 0..) |c, i| {
             switch (mode) {
                 .move_number => {
@@ -268,27 +307,35 @@ const pgnReader = struct {
                         start_read = true;
                     } else {
                         if (std.ascii.isWhitespace(c)) {
+                            const player_i: usize = @intFromBool(is_white);
                             const move_text = remaining_file[start_index..i];
-                            var is_castle_long: ?bool = null;
-                            const move_piece = switch (move_text[0]) {
-                                'K' => if (is_white) Pieces.K else Pieces.k,
-                                'Q' => if (is_white) Pieces.Q else Pieces.q,
-                                'R' => if (is_white) Pieces.R else Pieces.r,
-                                'B' => if (is_white) Pieces.B else Pieces.b,
-                                'N' => if (is_white) Pieces.N else Pieces.n,
-                                'O' => {
-                                    is_castle_long = move_text.len >= 5; //O-O >=3, O-O-O >=5
-                                    break if (is_white) Pieces.K else Pieces.k;
+                            var hold_change: Change = .{};
+                            hold_change.mover = switch (move_text[0]) {
+                                'K' => lbk: {
+                                    hold_change.from = players[player_i].king.square;
+                                    const skip_atk: usize = if (move_text[1] == 'x') 2 else 1;
+                                    hold_change.to = .{ .file = @truncate(move_text[skip_atk]-'a'), .rank = @truncate(move_text[skip_atk+1]-'1') };
+                                    if (skip_atk == 2) {
+                                        // reference the board to see what we are replacing
+                                        const pos = @as(usize, hold_change.from.rank)*8 + hold_change.from.rank;
+                                        hold_change.replace = players[player_i].board_enum[pos];
+                                    }
+                                    // gives `error: value with comptime-only type '@Type(.enum_literal)' depends on runtime control flow` if I do not put `Pieces` before value
+                                    break :lbk if (is_white) .K else .k;
                                 },
-                                else => if (is_white) Pieces.P else Pieces.p,
+                                'Q' => if (is_white) .Q else .q,
+                                'R' => if (is_white) .R else .r,
+                                'B' => if (is_white) .B else .b,
+                                'N' => if (is_white) .N else .n,
+                                'O' => lbo: {
+                                    const is_castle_long = move_text.len >= 5; //O-O >=3, O-O-O >=5
+                                    hold_change.castle = .{};
+                                    hold_change.castle.?.from = .{ .file = if (is_castle_long) 0 else 7, .rank = if (is_white) 0 else 7 };
+                                    hold_change.castle.?.to = .{ .file = if (is_castle_long) 3 else 5, .rank = hold_change.castle.?.from.rank };
+                                    break :lbo if (is_white) .K else .k;
+                                },
+                                else => if (is_white) .P else .p,
                             };
-                            var hold_change = Change{ .mover = move_piece };
-                            if (is_castle_long) |L| {
-                                // figure out if it's short or long
-                                hold_change.castle = .{};
-                            } else {
-                                // mean to put everything below this inside here if it is not a castle move
-                            }
                             // disambiguating moves:
                             // type 1: <piece letter><originating file><destination square> Nbe2
                             // type 2: <piece letter><originating rank><destination square> N2g3
@@ -298,11 +345,11 @@ const pgnReader = struct {
                             const sqr_sec_end = std.mem.indexOfNone(u8, move_text, "KQRNBabcdefgh12345678x");
                             const sqr_sec = if (sqr_sec_end) |end| move_text[1..end] else move_text[1..];
                             // have room to potentially read 1-2 squares
-                            const SqrStatus = enum { normal, file_disambig, rank_disambig, both_disambig };
+                            // const SqrStatus = enum { normal, file_disambig, rank_disambig, both_disambig };
                             var is_attack = false;
-                            var is_check = false;
-                            var is_checkmate = false;
-                            var is_promotion = false;
+                            // var is_check = false;
+                            // var is_checkmate = false;
+                            // var is_promotion = false;
                             var grabbed_file = false;
                             var grabbed_rank = false;
                             var sqr1 = Square.default;
@@ -331,19 +378,20 @@ const pgnReader = struct {
                                 }
                             }
                             // if disambig., sqr1 is 'to' and sqr2 is 'from', else sqr1 is 'to'
-                            if (sqr2) |_| {
-                                hold_change.from = sqr1;
-                            }
+                            // if (sqr2) |_| {
+                            //     hold_change.from = sqr1;
+                            // }
 
                             // var from = Square.default;
                             // find which pawn we moving
-                            if (move_piece == .P or move_piece == .p) {
+                            // TODO move into first switchy, apply logic as info builds "dont put off for after" instead of grab info and then logic through it
+                            if (false) {
                                 // d4, bxc5, a1=Q
                                 const attack = move_text[1] == 'x';
                                 const file_from = move_text[0]; // regardless if its an attack, the first character is the originating file
                                 // const file_to = if (attack) move_text[2] else ('a'-1);
                                 // const rank = if (attack) move_text[3] else move_text[1];
-                                for (players[@intFromBool(is_white)].pawn) |*p| {
+                                for (players[player_i].pawn) |*p| {
                                     if (p.alive and p.square.file == @as(u3, file_from - 'a')) {
                                         const next_rank: u3 = @truncate(move_text[if (attack) 3 else 1] - '1');
                                         const is_negative = p.square.rank > next_rank;
@@ -396,6 +444,7 @@ const pgnReader = struct {
                         if (c == ']') {
                             const timestamp_number = try std.fmt.parseUnsigned(u32, remaining_file[start_index..i], 10);
                             std.debug.print("{}\n", .{timestamp_number});
+                            move_list.items[move_list.items.len-1].delay = timestamp_number;
                             start_read = false;
                             is_white = !is_white;
                             mode = .move_number;
@@ -587,6 +636,8 @@ test "PGN tokenize" {
 
 // PGN reader
 pub fn main() !void {
+    const p = Player.init(false);
+    std.debug.print("{any}\n", .{p.board_enum});
     var gpa = std.heap.DebugAllocator(.{}).init;
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
