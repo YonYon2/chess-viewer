@@ -67,21 +67,7 @@ const ex_pgn =
     \\0:01:28.2][%timestamp 14]} 48. Qxg6# {[%clk 0:01:18.7][%timestamp 11]} 1-0
 ;
 
-const Pieces = enum(u8) {
-    nada = '.', 
-    P = 'P', 
-    N = 'N', 
-    B = 'B', 
-    R = 'R', 
-    Q = 'Q', 
-    K = 'K', 
-    p = 'p', 
-    n = 'n', 
-    b = 'b', 
-    r = 'r', 
-    q = 'q', 
-    k = 'k'
-};
+const Pieces = enum(u8) { nada = '.', P = 'P', N = 'N', B = 'B', R = 'R', Q = 'Q', K = 'K', p = 'p', n = 'n', b = 'b', r = 'r', q = 'q', k = 'k' };
 // x = +
 // x = #
 // O-O +
@@ -122,23 +108,13 @@ const Piece = struct {
 };
 
 const Player = struct {
+    // used for position reference to quickly figure out what is being replaced
     pawn: [8]Piece,
     knight: [10]Piece,
     bishop: [10]Piece,
     rook: [10]Piece,
     queen: [9]Piece,
     king: Piece,
-    board: [64]u8 = "RNBQKBNRPPPPPPPP................................pppppppprnbqkbnr".*,
-    // used for position reference to quickly figure out what is being replaced
-    // TODO get rid of all this big array schtuff and only work based on this array of enums
-    // TODO each player can't have their own board bruv
-    board_enum: [64]Pieces = blk: {
-        var result = [1]Pieces{.nada} ** 64;
-        for ("RNBQKBNRPPPPPPPP................................pppppppprnbqkbnr", 0..) |c, i| {
-            result[i] = @enumFromInt(c);
-        }
-        break :blk result;
-    },
     fn init(comptime first: bool) Player {
         const pawn_rank: u3 = if (first) 1 else 6;
         const main_rank: u3 = if (first) 0 else 7;
@@ -190,7 +166,14 @@ const Game = struct {
     time: u32 = 60, // seconds
     increment: u32 = 0, // seconds
     clock: [2]u32 = .{ 600, 600 }, // 10ths of a second
-    board: [64]u8 = "RNBQKBNRPPPPPPPP................................pppppppprnbqkbnr".*,
+    //board: [64]u8 = "RNBQKBNRPPPPPPPP................................pppppppprnbqkbnr".*,
+    board: [64]Pieces = blk: {
+        var result = [1]Pieces{.nada} ** 64;
+        for ("RNBQKBNRPPPPPPPP................................pppppppprnbqkbnr", 0..) |c, i| {
+            result[i] = @enumFromInt(c);
+        }
+        break :blk result;
+    },
     flip: bool = false,
 };
 
@@ -203,10 +186,10 @@ const Change = struct {
     promote: Pieces = .nada,
     castle: ?struct { from: Square = .default, to: Square = .default } = null,
     // clock: []const u8 = &.{},
-    check: bool = false, // will be used to highlight the opposing king 
+    check: bool = false, // will be used to highlight the opposing king
     delay: u32 = 1, // tenths of a second
 };
-// order of iterating through changes: 
+// order of iterating through changes:
 // 1. read `delay`
 // 2. wait for `delay` time elapsed
 // 3. update clock each 1s or each 0.1s if less than 20s
@@ -231,12 +214,12 @@ test "pieces enum" {
 }
 
 // object that holds the info for what was read from a PGN file
-const pgnReader = struct {
+const PgnReader = struct {
     const Self = @This();
     allocator: Allocator,
     game_info: Game,
     move_list: std.ArrayList(Change),
-    fn init(allocator: Allocator, contents: []const u8) !pgnReader {
+    fn init(allocator: Allocator, contents: []const u8) !PgnReader {
         var move_list = try std.ArrayList(Change).initCapacity(allocator, 50);
         var game = Game{};
         game.flip = true;
@@ -286,11 +269,12 @@ const pgnReader = struct {
         }
         const remaining_file = file_out.buffered();
         // view by character and piece together Change item to add to the move list
-        var is_white, var start_index: usize, var start_read = .{true, 0, false};
+        var is_white, var start_index: usize, var start_read = .{ true, 0, false };
         const Modes = enum { move_number, move, clock, timestamp };
         var mode = Modes.move_number;
-        // needs to be a var
-        const players = [_]Player{ .init(false), .init(true) };
+        // here for the purpose of finding a player's pieces without looking through
+        // TODO potentially don't need this
+        var players = [_]Player{ .init(false), .init(true) };
         for (remaining_file, 0..) |c, i| {
             switch (mode) {
                 .move_number => {
@@ -310,20 +294,24 @@ const pgnReader = struct {
                             const player_i: usize = @intFromBool(is_white);
                             const move_text = remaining_file[start_index..i];
                             var hold_change: Change = .{};
+                            // x: all, +: all, #: all, disambig.: QRBNP
                             hold_change.mover = switch (move_text[0]) {
                                 'K' => lbk: {
                                     hold_change.from = players[player_i].king.square;
                                     const skip_atk: usize = if (move_text[1] == 'x') 2 else 1;
-                                    hold_change.to = .{ .file = @truncate(move_text[skip_atk]-'a'), .rank = @truncate(move_text[skip_atk+1]-'1') };
+                                    hold_change.to = .{ .file = @truncate(move_text[skip_atk] - 'a'), .rank = @truncate(move_text[skip_atk + 1] - '1') };
+                                    players[player_i].king.square = hold_change.to;
                                     if (skip_atk == 2) {
                                         // reference the board to see what we are replacing
-                                        const pos = @as(usize, hold_change.from.rank)*8 + hold_change.from.rank;
+                                        const pos = @as(usize, hold_change.from.rank) * 8 + hold_change.from.rank;
                                         hold_change.replace = players[player_i].board_enum[pos];
                                     }
                                     // gives `error: value with comptime-only type '@Type(.enum_literal)' depends on runtime control flow` if I do not put `Pieces` before value
                                     break :lbk if (is_white) .K else .k;
                                 },
-                                'Q' => if (is_white) .Q else .q,
+                                'Q' => lbq: {
+                                    break :lbq if (is_white) .Q else .q;
+                                },
                                 'R' => if (is_white) .R else .r,
                                 'B' => if (is_white) .B else .b,
                                 'N' => if (is_white) .N else .n,
@@ -444,7 +432,7 @@ const pgnReader = struct {
                         if (c == ']') {
                             const timestamp_number = try std.fmt.parseUnsigned(u32, remaining_file[start_index..i], 10);
                             std.debug.print("{}\n", .{timestamp_number});
-                            move_list.items[move_list.items.len-1].delay = timestamp_number;
+                            move_list.items[move_list.items.len - 1].delay = timestamp_number;
                             start_read = false;
                             is_white = !is_white;
                             mode = .move_number;
@@ -656,6 +644,6 @@ pub fn main() !void {
         return;
     }
 
-    var my_pgn = try pgnReader.init(allocator, fname);
+    var my_pgn = try PgnReader.init(allocator, fname);
     defer my_pgn.deinit();
 }
