@@ -67,7 +67,21 @@ const ex_pgn =
     \\0:01:28.2][%timestamp 14]} 48. Qxg6# {[%clk 0:01:18.7][%timestamp 11]} 1-0
 ;
 
-const Pieces = enum(u8) { nada = '.', P = 'P', N = 'N', B = 'B', R = 'R', Q = 'Q', K = 'K', p = 'p', n = 'n', b = 'b', r = 'r', q = 'q', k = 'k' };
+const Pieces = enum(u8) {
+    nada = '.',
+    P = 'P',
+    N = 'N',
+    B = 'B',
+    R = 'R',
+    Q = 'Q',
+    K = 'K',
+    p = 'p',
+    n = 'n',
+    b = 'b',
+    r = 'r',
+    q = 'q',
+    k = 'k',
+};
 // x = +
 // x = #
 // O-O +
@@ -133,6 +147,13 @@ const Player = struct {
             .queen = [1]Piece{Piece.activate(3, main_rank)} ++ [1]Piece{Piece.default} ** 8,
             .king = Piece.activate(4, main_rank),
         };
+    }
+    /// give the square of the player piece that can jump to the `to` square
+    fn findPiece(self: Player, piece: Pieces, to: Square) ?Square {
+        if (piece == .K or piece == .k) {
+            return if (self.king.alive) self.king.square else null;
+        }
+        const piece_arr = 
     }
     // give the pawn index and what to transfer it into
     // fn promote(self: *Player, pindex: usize) void {
@@ -211,6 +232,12 @@ test "slice of a slice" {
 test "pieces enum" {
     // const p = Pieces.B;
     std.debug.print("\n{c}\n", .{@typeInfo(Pieces).@"enum".fields[0].value});
+}
+
+test "parse seven character move" {
+    const move_text = "Qa6xb7#";
+    const str: []const u8 = &[_]u8{ 'A', 'L' };
+    std.debug.print("\n{s}\n{s}\n", .{ move_text, str });
 }
 
 // object that holds the info for what was read from a PGN file
@@ -293,95 +320,96 @@ const PgnReader = struct {
                         if (std.ascii.isWhitespace(c)) {
                             const player_i: usize = @intFromBool(is_white);
                             const move_text = remaining_file[start_index..i];
+                            var castling = false;
+                            // push to movelist, check which piece is moving
                             var hold_change: Change = .{};
-                            // x: all, +: all, #: all, disambig.: QRBNP
                             hold_change.mover = switch (move_text[0]) {
-                                'K' => lbk: {
-                                    hold_change.from = players[player_i].king.square;
-                                    const skip_atk: usize = if (move_text[1] == 'x') 2 else 1;
-                                    hold_change.to = .{ .file = @truncate(move_text[skip_atk] - 'a'), .rank = @truncate(move_text[skip_atk + 1] - '1') };
-                                    players[player_i].king.square = hold_change.to;
-                                    if (skip_atk == 2) {
-                                        // reference the board to see what we are replacing
-                                        const pos = @as(usize, hold_change.from.rank) * 8 + hold_change.from.rank;
-                                        hold_change.replace = players[player_i].board_enum[pos];
-                                    }
-                                    // gives `error: value with comptime-only type '@Type(.enum_literal)' depends on runtime control flow` if I do not put `Pieces` before value
-                                    break :lbk if (is_white) .K else .k;
-                                },
-                                'Q' => lbq: {
-                                    break :lbq if (is_white) .Q else .q;
-                                },
+                                'K' => if (is_white) .K else .k,
+                                'Q' => if (is_white) .Q else .q,
                                 'R' => if (is_white) .R else .r,
                                 'B' => if (is_white) .B else .b,
                                 'N' => if (is_white) .N else .n,
                                 'O' => lbo: {
+                                    // handle all castling logic since its fixed (except for check and checkmate)
+                                    castling = true;
                                     const is_castle_long = move_text.len >= 5; //O-O >=3, O-O-O >=5
-                                    hold_change.castle = .{};
-                                    hold_change.castle.?.from = .{ .file = if (is_castle_long) 0 else 7, .rank = if (is_white) 0 else 7 };
-                                    hold_change.castle.?.to = .{ .file = if (is_castle_long) 3 else 5, .rank = hold_change.castle.?.from.rank };
+                                    const which_rank: u3 = if (is_white) 0 else 7;
+                                    hold_change.from = players[player_i].king.square;
+                                    hold_change.to = .{ .file = if (is_castle_long) 6 else 2, .rank = which_rank };
+                                    // update player king
+                                    players[player_i].king.square = hold_change.to;
+                                    hold_change.castle = .{
+                                        .from = .{ .file = if (is_castle_long) 0 else 7, .rank = which_rank },
+                                        .to = .{ .file = if (is_castle_long) 3 else 5, .rank = which_rank },
+                                    };
+                                    // TODO update player rook
                                     break :lbo if (is_white) .K else .k;
                                 },
                                 else => if (is_white) .P else .p,
                             };
+                            // fill in `from`, `to`, `replace`
+                            if (!castling) {
+                                // hold_change
+                                // const skip_atk: usize = if (move_text[1] == 'x') 2 else 1;
+
+                                // hold_change.to = .{ .file = @truncate(move_text[skip_atk] - 'a'), .rank = @truncate(move_text[skip_atk + 1] - '1') };
+                                // players[player_i].king.square = hold_change.to;
+                                // if (skip_atk == 2) {
+                                //     // reference the board to see what we are replacing
+                                //     const pos = @as(usize, hold_change.from.rank) * 8 + hold_change.from.rank;
+                                //     hold_change.replace = players[player_i].board_enum[pos];
+                                // }
+                            }
                             // disambiguating moves:
                             // type 1: <piece letter><originating file><destination square> Nbe2
                             // type 2: <piece letter><originating rank><destination square> N2g3
                             // type 3: <piece letter><originating square><destination square> Nb1c3
                             // first 4 (5 if take 'x' separates) characters are potentially files/ranks/square+destination square
-                            // distinguished by originating ranks
+                            // read square and attack portion of the text
                             const sqr_sec_end = std.mem.indexOfNone(u8, move_text, "KQRNBabcdefgh12345678x");
                             const sqr_sec = if (sqr_sec_end) |end| move_text[1..end] else move_text[1..];
                             // have room to potentially read 1-2 squares
-                            // const SqrStatus = enum { normal, file_disambig, rank_disambig, both_disambig };
                             var is_attack = false;
-                            // var is_check = false;
-                            // var is_checkmate = false;
-                            // var is_promotion = false;
-                            var grabbed_file = false;
-                            var grabbed_rank = false;
-                            var sqr1 = Square.default;
-                            var sqr2 = Square.default;
+                            var file_count: u2, var rank_count: u2 = .{ 0, 0 };
+                            var sqr1, var sqr2 = .{ Square.default, Square.default };
                             // bxc5: b5, c5
                             for (sqr_sec) |ch| {
                                 if (ch >= 'a' and ch <= 'h') {
-                                    if (!grabbed_file) {
+                                    if (file_count == 0) {
                                         sqr1.file = @truncate(ch - 'a');
                                         sqr2.file = sqr1.file;
-                                        grabbed_file = true;
                                     } else {
                                         sqr2.file = @truncate(ch - 'a');
                                     }
+                                    file_count += 1;
                                 } else if (ch >= '1' and ch <= '8') {
-                                    if (!grabbed_rank) {
+                                    if (rank_count == 0) {
                                         sqr1.rank = @truncate(ch - '1');
                                         sqr2.rank = sqr1.rank;
-                                        grabbed_rank = true;
                                     } else {
                                         sqr2.rank = @truncate(ch - '1');
                                     }
-                                    // sqr2 = Square{ .file = sqr1.file, .rank = sqr1.rank };
+                                    rank_count += 1;
                                 } else if (ch == 'x') {
                                     is_attack = true;
                                 }
                             }
+                            // 1,1 from: <find which piece>, to: sqr1
+                            // 2,1 from:
                             // if disambig., sqr1 is 'to' and sqr2 is 'from', else sqr1 is 'to'
-                            // if (sqr2) |_| {
-                            //     hold_change.from = sqr1;
-                            // }
 
-                            // var from = Square.default;
                             // find which pawn we moving
-                            // TODO move into first switchy, apply logic as info builds "dont put off for after" instead of grab info and then logic through it
-                            if (false) {
-                                // d4, bxc5, a1=Q
-                                const attack = move_text[1] == 'x';
+                            // TODO apply logic as info builds "dont put off for after" instead of grab info and then logic through it
+                            if (hold_change.mover != .K or hold_change.mover == .k) {
                                 const file_from = move_text[0]; // regardless if its an attack, the first character is the originating file
-                                // const file_to = if (attack) move_text[2] else ('a'-1);
-                                // const rank = if (attack) move_text[3] else move_text[1];
-                                for (players[player_i].pawn) |*p| {
+                                const player_pieces: []Piece = switch (hold_change.mover) {
+                                    .P, .p => &players[player_i].pawn,
+                                    .Q, .q => &players[player_i].queen,
+                                    else => &.{},
+                                };
+                                for (player_pieces) |*p| {
                                     if (p.alive and p.square.file == @as(u3, file_from - 'a')) {
-                                        const next_rank: u3 = @truncate(move_text[if (attack) 3 else 1] - '1');
+                                        const next_rank: u3 = @truncate(move_text[if (is_attack) 3 else 1] - '1');
                                         const is_negative = p.square.rank > next_rank;
                                         const dist = if (is_negative) p.square.rank - next_rank else next_rank - p.square.rank;
                                         if (dist == 1) {
@@ -391,7 +419,7 @@ const PgnReader = struct {
                                             } else {
                                                 p.square.rank += 1;
                                             }
-                                            if (attack) {
+                                            if (is_attack) {
                                                 p.square.file = move_text[2];
                                             }
                                         }
@@ -441,50 +469,6 @@ const PgnReader = struct {
                 },
             }
         }
-        // // make copy of the rest of contents and remove newlines (helps to have "1. " and not "1.\r\n" before a move)
-        // // const cr_len = std.mem.replacementSize(u8, it.rest(), "\r", "");
-        // const new_len = std.mem.replacementSize(u8, remaining_file, "\r", "");
-        // const move_txt = try allocator.alloc(u8, new_len);
-        // defer allocator.free(move_txt);
-        // _ = std.mem.replace(u8, remaining_file, "\r", "", move_txt);
-        // const in_tmp: []const u8 = move_txt;
-        // _ = std.mem.replace(u8, in_tmp, "\n", " ", move_txt);
-
-        // // go ply by ply
-        // var move_it = std.mem.tokenizeSequence(u8, move_txt, ". ");
-        // // idk
-        // var erm = std.once(declare);
-        // while (move_it.next()) |tkn| {
-        //     erm.call();
-        //     var move_parts_it = std.mem.tokenizeScalar(u8, tkn, ' ');
-        //     var count: usize = 0;
-        //     std.debug.print("\"", .{});
-        //     while (move_parts_it.next()) |tkn_part| : (count += 1) {
-        //         switch (count) {
-        //             0 => {
-        //                 // const move = std.mem.trimEnd(u8, tkn_part, "0123456789. ");
-        //                 std.debug.print("{s}", .{tkn_part});
-        //             },
-        //             2 => {
-        //                 var clock = std.mem.zeroes([1024]u8);
-        //                 const cutOff = std.mem.indexOfNone(u8, tkn_part, "0123456789:.").?;
-        //                 _ = try std.fmt.bufPrint(&clock, "{s}", .{tkn_part[0..cutOff]});
-        //                 std.debug.print(" {s}", .{clock});
-        //             },
-        //             3 => {
-        //                 const wait = std.fmt.parseUnsigned(usize, std.mem.trim(u8, tkn_part, "]} "), 10) catch blk: {
-        //                     std.debug.print(" Invalid timestamp!", .{});
-        //                     break :blk 1;
-        //                 };
-        //                 std.debug.print(" {}", .{wait});
-        //             },
-        //             else => {
-        //                 // show = false;
-        //             },
-        //         }
-        //     }
-        //     std.debug.print("\"\n", .{});
-        // }
         std.debug.print("{} plies! {} moves!\n", .{ move_list.items.len, move_list.items.len / 2 });
         return .{
             .allocator = allocator,
@@ -624,8 +608,6 @@ test "PGN tokenize" {
 
 // PGN reader
 pub fn main() !void {
-    const p = Player.init(false);
-    std.debug.print("{any}\n", .{p.board_enum});
     var gpa = std.heap.DebugAllocator(.{}).init;
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
