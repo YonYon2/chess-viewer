@@ -82,6 +82,12 @@ const Pieces = enum(u8) {
     q = 'q',
     k = 'k',
 };
+
+test "value of enum" {
+    const w = Pieces.b;
+    std.debug.print("\n{c}\n", .{@intFromEnum(w)});
+}
+
 // x = +
 // x = #
 // O-O +
@@ -90,11 +96,9 @@ const Pieces = enum(u8) {
 test "print piece letters" {
     std.debug.print("\nbegin\n", .{});
     inline for (@typeInfo(Pieces).@"enum".fields) |e| {
-        // if (std.mem.eql(@TypeOf(e.name), e.name, "nada"))
-        //     continue;
         std.debug.print("{s} ", .{e.name});
     }
-    std.debug.print("end\n", .{});
+    std.debug.print("\nend\n", .{});
 }
 
 // invariants:
@@ -103,10 +107,24 @@ test "print piece letters" {
 // init: always dead piece unless you provide a file and rank
 
 const Square = struct {
+    const Self = @This();
     file: u3,
     rank: u3,
     const default: Square = .{ .file = 0, .rank = 0 };
+    /// algebraic notation of square as a 2-byte string
+    fn str(self: Self) [2]u8 {
+        return .{'a' + @as(u8, self.file), '1' + @as(u8, self.rank)};
+    }
+    /// number between 0-64 to index a Game board
+    fn boardIndex(self: Self) usize {
+        return @as(usize, self.rank)*8 + self.file;
+    }
 };
+
+test "e4 printed" {
+    const p: Square = .{ .file = 4, .rank = 3 };
+    std.debug.print("\nPawn to {s}\n", .{ p.str() });
+}
 
 const Piece = struct {
     const Self = @This();
@@ -148,24 +166,36 @@ const Player = struct {
             .king = Piece.activate(4, main_rank),
         };
     }
-    /// give the square of the player piece that can jump to the `to` square
-    fn findPiece(self: Player, piece: Pieces, to: Square) ?Square {
-        if (piece == .K or piece == .k) {
-            return if (self.king.alive) self.king.square else null;
-        }
-        const piece_arr = 
+    /// give the square of the player piece that can jump to the `to` square (assuming the move is valid, we don't check if `to` is empty)
+    fn findPiece(self: Player, board: []const Pieces, piece: Pieces, to: Square, attacking: bool) ?Square {
+        return switch (piece) {
+            .K, .k => if (self.king.alive) self.king.square else null,
+            .P, .p => findp: {
+                if (!attacking) {
+                    for (self.pawn) |p| {
+                        if (p.alive and p.square.file == to.file) {
+                            var sqr_i = p.square.boardIndex();
+                            // distance to next rank (if +/-2, make sure its at starting rank)
+                            const dist: i4 = to.rank - p.square.rank;
+                            if (piece == .P and dist > 0) {
+                                if (dist == 2 and p.square.rank == 1)
+                            }
+                            if (p.square.rank == if (piece == .P) 1 else 6)
+                            if (board[sqr_i] == .nada) {
+                                break :findp p.square;
+                            }
+                        }
+                    }
+                }
+                break :findp null;
+            },
+            else => null,
+        };
     }
     // give the pawn index and what to transfer it into
     // fn promote(self: *Player, pindex: usize) void {
     //     _ = self.pawn[pindex].take();
     // }
-};
-
-// meep
-const Move = struct {
-    piece: Pieces,
-    prev: Square,
-    next: Square,
 };
 
 const ChessUnicode = enum(u21) { K = 0x2654, Q, R, B, N, P, k, q, r, b, n, p };
@@ -188,6 +218,7 @@ const Game = struct {
     increment: u32 = 0, // seconds
     clock: [2]u32 = .{ 600, 600 }, // 10ths of a second
     //board: [64]u8 = "RNBQKBNRPPPPPPPP................................pppppppprnbqkbnr".*,
+    // ranks 1-8 goes top to bottom, and files a-h goes left to right
     board: [64]Pieces = blk: {
         var result = [1]Pieces{.nada} ** 64;
         for ("RNBQKBNRPPPPPPPP................................pppppppprnbqkbnr", 0..) |c, i| {
@@ -197,6 +228,22 @@ const Game = struct {
     },
     flip: bool = false,
 };
+
+test "find piece squares" {
+    std.debug.print("\n", .{});
+    const game: Game = .{};
+    const p1 = Player.init(false);
+    const moves = [2]Square {
+        .default,
+        .{ .file = 4, .rank = 3},
+    };
+    const move_piece = [2]Pieces{ .K, .P };
+    const move_atk = [2]bool{ false, false };
+    for (0..2) |i| {
+        const res = p1.findPiece(&game.board, move_piece[i], moves[i], move_atk[i]);
+        std.debug.print("{c} {s}\n", .{ @intFromEnum(move_piece[i]), if (res) |r| &r.str() else "none" });
+    }
+}
 
 // for the purposes of updating the screen
 const Change = struct {
