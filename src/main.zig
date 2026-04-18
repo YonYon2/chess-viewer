@@ -447,7 +447,7 @@ const PgnReader = struct {
                             };
                             // read square and attack portion of the text
                             const sqr_sec_end = std.mem.indexOfNone(u8, move_text, "KQRNBabcdefgh12345678x");
-                            const sqr_sec = if (sqr_sec_end) |end| move_text[1..end] else move_text[1..];
+                            const sqr_sec = if (sqr_sec_end) |end| move_text[0..end] else move_text[0..];
                             // have room to potentially read 1-2 squares
                             var is_attack = false;
                             var file_count: u2, var rank_count: u2 = .{ 0, 0 };
@@ -474,9 +474,11 @@ const PgnReader = struct {
                                     is_attack = true;
                                 }
                             }
-                            // 1,1 from: <find which piece>, to: sqr1
-                            // 2,1 from:
-                            // if disambig., sqr1 is 'to' and sqr2 is 'from', else sqr1 is 'to'
+                            // file_count, rank_count
+                            // 1,1 (ex. Ke6)            from: <find>,                to: sqr1
+                            // 2,1 or 1,2 (ex. bxc5)    from: sqr1.file | sqr1.rank, to: sqr1
+                            // 2,2 (ex. Qa1xh8#)        from: sqr1,                  to: sqr2
+
                             // fill in `from`, `to`, `replace` based on the mover (for pawns, depends on attack)
                             if (!castling) {
                                 switch (hold_change.mover) {
@@ -487,7 +489,35 @@ const PgnReader = struct {
                                         players[player_i].king.square = sqr1;
                                     },
                                     .P, .p => {
-
+                                        // pawn movement always 1,1
+                                        for (&players[player_i].pawn) |*p| {
+                                            if (p.alive and p.square.file == sqr1.file) {
+                                                const sqr_o =  p.square.boardIndex();
+                                                if (!is_attack) {
+                                                    const sqr_i = if (is_white) sqr_o + 8 else sqr_o - 8;
+                                                    // ONLY thing that matters is if 1 space in front of pawn is empty, for both 1 hop and 2 hop pawns
+                                                    if (game.board[sqr_i] == .nada) {
+                                                        hold_change.from = p.square;
+                                                        hold_change.to = sqr1;
+                                                        p.square = sqr1;
+                                                        game.board[sqr_o] = .nada;
+                                                        game.board[sqr_i] = hold_change.mover;
+                                                        break;
+                                                    }
+                                                } else {
+                                                    const sqr_i = if (is_white) sqr_o + 8 + (sqr2.file-sqr1.file) else sqr_o - 8 + (sqr2.file-sqr1.file);
+                                                    if (game.board[sqr_i] != .nada) {
+                                                        hold_change.from = p.square;
+                                                        hold_change.to = sqr2;
+                                                        hold_change.replace = game.board[sqr_i];
+                                                        p.square = sqr2;
+                                                        game.board[sqr_o] = .nada;
+                                                        game.board[sqr_i] = hold_change.mover;
+                                                        break;
+                                                    }
+                                                }
+                                            }
+                                        }
                                     },
                                     else => unreachable,
                                 }
