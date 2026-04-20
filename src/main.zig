@@ -1,6 +1,17 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
+const ESC = "\u{1b}";
+const CSI = ESC ++ "[";
+const CLS = CSI ++ "2J";
+const SAVE_POS = CSI ++ "s";
+const LOAD_POS = CSI ++ "u";
+
+test "ansi clear" {
+    std.debug.print("\nYup\n", .{});
+    std.debug.print(CLS ++ SAVE_POS ++ "screen cleared\n\n\n\nOne is here" ++ LOAD_POS ++ "Two is here? ", .{});
+}
+
 const ex_pgn =
     \\[White "Guest7527675399"]
     \\[Black "Guest4401176224"]
@@ -113,17 +124,17 @@ const Square = struct {
     const default: Square = .{ .file = 0, .rank = 0 };
     /// algebraic notation of square as a 2-byte string
     fn str(self: Self) [2]u8 {
-        return .{'a' + @as(u8, self.file), '1' + @as(u8, self.rank)};
+        return .{ 'a' + @as(u8, self.file), '1' + @as(u8, self.rank) };
     }
     /// number between 0-64 to index a Game board
     fn boardIndex(self: Self) usize {
-        return @as(usize, self.rank)*8 + self.file;
+        return @as(usize, self.rank) * 8 + self.file;
     }
 };
 
 test "e4 printed" {
     const p: Square = .{ .file = 4, .rank = 3 };
-    std.debug.print("\nPawn to {s}\n", .{ p.str() });
+    std.debug.print("\nPawn to {s}\n", .{p.str()});
 }
 
 const Piece = struct {
@@ -211,17 +222,17 @@ test "print chess" {
 // https://www.saremba.de/chessgml/standards/pgn/pgn-complete.htm
 const Game = struct {
     const Self = @This();
+    const initial_board = "RNBQKBNRPPPPPPPP................................pppppppprnbqkbnr";
     white: []const u8 = "Player 1",
     black: []const u8 = "Player 2",
     result: []const u8 = "Draw",
     time: u32 = 60, // seconds
     increment: u32 = 0, // seconds
     clock: [2]u32 = .{ 600, 600 }, // 10ths of a second
-    //board: [64]u8 = "RNBQKBNRPPPPPPPP................................pppppppprnbqkbnr".*,
     // ranks 1-8 goes top to bottom, and files a-h goes left to right
     board: [64]Pieces = blk: {
         var result = [1]Pieces{.nada} ** 64;
-        for ("RNBQKBNRPPPPPPPP................................pppppppprnbqkbnr", 0..) |c, i| {
+        for (initial_board, 0..) |c, i| {
             result[i] = @enumFromInt(c);
         }
         break :blk result;
@@ -233,9 +244,9 @@ test "find piece squares" {
     std.debug.print("\n", .{});
     const game: Game = .{};
     const p1 = Player.init(false);
-    const moves = [2]Square {
+    const moves = [2]Square{
         .default,
-        .{ .file = 4, .rank = 3},
+        .{ .file = 4, .rank = 3 },
     };
     const move_piece = [2]Pieces{ .K, .P };
     const move_atk = [2]bool{ false, false };
@@ -324,7 +335,7 @@ fn test_find_squares(move_text: []const u8) void {
 
 test "detect disambiguating moves" {
     std.debug.print("\n", .{});
-    const moves = [_][]const u8{"Kb6", "Bgxh7", "Qb2f6"};
+    const moves = [_][]const u8{ "Kb6", "Bgxh7", "Qb2f6" };
     for (moves) |m| {
         test_find_squares(m);
     }
@@ -515,7 +526,7 @@ const PgnReader = struct {
                                                     if (file_dir) {
                                                         sqr_i += 1;
                                                     } else sqr_i -= 1;
-                                                    std.debug.print(", {} {c} 8 {c} 1>", .{if (is_white) sqr_i-8 else sqr_i+8, if (is_white) @as(u8, '+') else @as(u8,'-'), if (file_dir) @as(u8,'+') else @as(u8,'-')});
+                                                    std.debug.print(", {} {c} 8 {c} 1>", .{ if (is_white) sqr_i - 8 else sqr_i + 8, if (is_white) @as(u8, '+') else @as(u8, '-'), if (file_dir) @as(u8, '+') else @as(u8, '-') });
 
                                                     // also check for en passant
                                                     const enpass_index = if (file_dir) sqr_o + 1 else sqr_o - 1;
@@ -586,7 +597,7 @@ const PgnReader = struct {
         }
         std.debug.print("{} plies! {} moves!\n", .{ move_list.items.len, move_list.items.len / 2 });
         for (move_list.items) |change| {
-            std.debug.print("{c} from {s} to {s},", .{@intFromEnum(change.mover), change.from.str(), change.to.str()});
+            std.debug.print("{c} from {s} to {s},", .{ @intFromEnum(change.mover), change.from.str(), change.to.str() });
             if (change.replace != .nada) {
                 std.debug.print("x {c}", .{@intFromEnum(change.replace)});
             }
@@ -605,20 +616,20 @@ const PgnReader = struct {
         _ = self;
     }
     fn drawInit(self: Self) void {
-        for (self.game_info.board, 0..) |P, i| {
-            if (i%8 == 0)
+        _ = self;
+        // std.debug.print();
+        for (Game.initial_board, 0..) |P, i| {
+            if (i % 8 == 0)
                 std.debug.print("\n", .{});
-            std.debug.print("{c}", .{@intFromEnum(P)});
+            std.debug.print("{c}", .{P});
         }
     }
     fn drawNext(self: *Self) void {
         self.current_move += 1;
     }
     fn drawPrev(self: *Self) void {
-        
         if (self.current_move > 0)
             self.current_move -= 1;
-        
     }
     fn deinit(self: *Self) void {
         self.move_list.deinit(self.allocator);
@@ -773,7 +784,7 @@ pub fn main() !void {
     var my_pgn = try PgnReader.init(allocator, fname);
     defer my_pgn.deinit();
     my_pgn.drawInit();
-    std.debug.print("\n", .{});  
+    std.debug.print("\n", .{});
 
     // only accept 'L' for previous, 'R' or ' ' for next
     var input_b: [1]u8 = undefined;
