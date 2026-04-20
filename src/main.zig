@@ -255,6 +255,7 @@ const Change = struct {
     castle: ?struct { from: Square = .default, to: Square = .default } = null,
     // clock: []const u8 = &.{},
     check: bool = false, // will be used to highlight the opposing king
+    enpassant: bool = false, // replace will redo the piece to the left/right of the pawn
     delay: u32 = 1, // tenths of a second
 };
 // order of iterating through changes:
@@ -334,6 +335,7 @@ const PgnReader = struct {
     const Self = @This();
     allocator: Allocator,
     game_info: Game,
+    current_move: usize = 0,
     move_list: std.ArrayList(Change),
     fn init(allocator: Allocator, contents: []const u8) !PgnReader {
         var move_list = try std.ArrayList(Change).initCapacity(allocator, 50);
@@ -492,7 +494,7 @@ const PgnReader = struct {
                                         // pawn movement always 1,1
                                         for (&players[player_i].pawn) |*p| {
                                             if (p.alive and p.square.file == sqr1.file) {
-                                                const sqr_o =  p.square.boardIndex();
+                                                const sqr_o = p.square.boardIndex();
                                                 if (!is_attack) {
                                                     const sqr_i = if (is_white) sqr_o + 8 else sqr_o - 8;
                                                     // ONLY thing that matters is if 1 space in front of pawn is empty, for both 1 hop and 2 hop pawns
@@ -505,14 +507,29 @@ const PgnReader = struct {
                                                         break;
                                                     }
                                                 } else {
-                                                    const sqr_i = if (is_white) sqr_o + 8 + (sqr2.file-sqr1.file) else sqr_o - 8 + (sqr2.file-sqr1.file);
-                                                    if (game.board[sqr_i] != .nada) {
+                                                    // check 1 square diagonal towards the `to` square
+                                                    // hm integer overflow
+                                                    const file_dir = sqr2.file > sqr1.file;
+                                                    std.debug.print("<{}", .{sqr_o});
+                                                    var sqr_i = if (is_white) sqr_o + 8 else sqr_o - 8;
+                                                    if (file_dir) {
+                                                        sqr_i += 1;
+                                                    } else sqr_i -= 1;
+                                                    std.debug.print(", {} {c} 8 {c} 1>", .{if (is_white) sqr_i-8 else sqr_i+8, if (is_white) @as(u8, '+') else @as(u8,'-'), if (file_dir) @as(u8,'+') else @as(u8,'-')});
+
+                                                    // also check for en passant
+                                                    const enpass_index = if (file_dir) sqr_o + 1 else sqr_o - 1;
+                                                    hold_change.enpassant = game.board[enpass_index] == hold_change.mover;
+                                                    std.debug.print("enpass? {s}, ", .{if (hold_change.enpassant) "YES" else "NO"});
+                                                    if (game.board[sqr_i] != .nada or hold_change.enpassant) {
                                                         hold_change.from = p.square;
                                                         hold_change.to = sqr2;
-                                                        hold_change.replace = game.board[sqr_i];
                                                         p.square = sqr2;
+                                                        hold_change.replace = if (game.board[sqr_i] != .nada) game.board[sqr_i] else game.board[enpass_index];
                                                         game.board[sqr_o] = .nada;
                                                         game.board[sqr_i] = hold_change.mover;
+                                                        if (hold_change.enpassant)
+                                                            game.board[enpass_index] = .nada;
                                                         break;
                                                     }
                                                 }
@@ -568,11 +585,40 @@ const PgnReader = struct {
             }
         }
         std.debug.print("{} plies! {} moves!\n", .{ move_list.items.len, move_list.items.len / 2 });
+        for (move_list.items) |change| {
+            std.debug.print("{c} from {s} to {s},", .{@intFromEnum(change.mover), change.from.str(), change.to.str()});
+            if (change.replace != .nada) {
+                std.debug.print("x {c}", .{@intFromEnum(change.replace)});
+            }
+            // if (change.castle) |c| {
+            //     std.debug.print("{any}", .{c});
+            // }
+            std.debug.print("\n", .{});
+        }
         return .{
             .allocator = allocator,
             .game_info = game,
             .move_list = move_list, //move_list,
         };
+    }
+    fn drawPlayback(self: Self) void {
+        _ = self;
+    }
+    fn drawInit(self: Self) void {
+        for (self.game_info.board, 0..) |P, i| {
+            if (i%8 == 0)
+                std.debug.print("\n", .{});
+            std.debug.print("{c}", .{@intFromEnum(P)});
+        }
+    }
+    fn drawNext(self: *Self) void {
+        self.current_move += 1;
+    }
+    fn drawPrev(self: *Self) void {
+        
+        if (self.current_move > 0)
+            self.current_move -= 1;
+        
     }
     fn deinit(self: *Self) void {
         self.move_list.deinit(self.allocator);
@@ -726,4 +772,19 @@ pub fn main() !void {
 
     var my_pgn = try PgnReader.init(allocator, fname);
     defer my_pgn.deinit();
+    my_pgn.drawInit();
+    std.debug.print("\n", .{});  
+
+    // only accept 'L' for previous, 'R' or ' ' for next
+    var input_b: [1]u8 = undefined;
+    var stdin_reader = std.fs.File.stdin().reader(&input_b);
+    const stdin = &stdin_reader.interface;
+    while (input_b[0] != 'q') {
+        // std.debug.print("{}\r", .{try stdin.takeByte()});
+        const char = try stdin.takeByte();
+        if (char == 'R' or char == ' ') {
+            my_pgn.drawNext();
+        }
+    }
+    std.debug.print("\n", .{});
 }
