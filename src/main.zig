@@ -6,10 +6,15 @@ const CSI = ESC ++ "[";
 const CLS = CSI ++ "2J";
 const SAVE_POS = CSI ++ "s";
 const LOAD_POS = CSI ++ "u";
+const RESET_POS = CSI ++ "H";
+
+fn cursorGoto(row: comptime_int, col: comptime_int) []const u8 {
+    return CSI ++ std.fmt.comptimePrint("{};{}H", .{ row, col });
+}
 
 test "ansi clear" {
-    std.debug.print("\nYup\n", .{});
-    std.debug.print(CLS ++ SAVE_POS ++ "screen cleared\n\n\n\nOne is here" ++ LOAD_POS ++ "Two is here? ", .{});
+    std.debug.print(CLS ++ RESET_POS ++ "Yup\n" ++ cursorGoto(3, 3) ++ "mid!", .{});
+    // std.debug.print(CLS ++ SAVE_POS ++ "screen cleared\n\n\n\nOne is here" ++ LOAD_POS ++ "Two is here? \n\n\n\n\nPoop" ++ ORIGIN_POS, .{});
 }
 
 const ex_pgn =
@@ -239,6 +244,24 @@ const Game = struct {
     },
     flip: bool = false,
 };
+
+// convert tenths of a second amount into the format: mm:ss OR ss.t When less than 20 seconds
+// only needs 6 u8s to fit clock
+fn clockStr(buf: *[6]u8, time: u32) []const u8 {
+    const s = (time / 10) % 60;
+    const m = time / 10 / 60;
+    if (time >= 200)
+        return std.fmt.bufPrint(&buf.*, "{:>2}:{:0>2} ", .{ m, s }) catch unreachable;
+    const t = time % 10;
+    return std.fmt.bufPrint(&buf.*, "0:{:0>2}.{:1}", .{ s, t }) catch unreachable;
+}
+
+test "print clock" {
+    var clock_buf = [1]u8{33} ** 6;
+    std.debug.print("\n{s}\n", .{clockStr(&clock_buf, 611)});
+    std.debug.print("{s}\n", .{clockStr(&clock_buf, 35_999)});
+    std.debug.print("{s}\n", .{clockStr(&clock_buf, 257)});
+}
 
 test "find piece squares" {
     std.debug.print("\n", .{});
@@ -616,12 +639,25 @@ const PgnReader = struct {
         _ = self;
     }
     fn drawInit(self: Self) void {
-        _ = self;
-        // std.debug.print();
+        std.debug.print(CLS ++ RESET_POS, .{});
         for (Game.initial_board, 0..) |P, i| {
             if (i % 8 == 0)
                 std.debug.print("\n", .{});
             std.debug.print("{c}", .{P});
+        }
+        // save the input line position
+        std.debug.print("\n\n" ++ SAVE_POS ++ "Input:", .{});
+        // go back and print player names and clocks
+        if (self.game_info.flip) {
+            // const top_pname = if (self.game_info.flip) self.game_info.white else self.game_info.black;
+            // // const top_clock = self.game_info.clock;
+            // const bottom_pname = if (self.game_info.flip) self.game_info.black else self.game_info.white;
+            // _ = bottom_pname;
+            // std.debug.print(cursorGoto(1, 11) ++ "{s}" ++ cursorGoto(2, 11), .{
+            //     top_pname,
+            // });
+        } else {
+            // std.debug.print(cursorGoto(1, 11) ++ self.game_info.white, .{});
         }
     }
     fn drawNext(self: *Self) void {
@@ -784,12 +820,28 @@ pub fn main() !void {
     var my_pgn = try PgnReader.init(allocator, fname);
     defer my_pgn.deinit();
     my_pgn.drawInit();
-    std.debug.print("\n", .{});
+    // std.debug.print("\n", .{});
 
-    // only accept 'L' for previous, 'R' or ' ' for next
+    var times_up: u32 = 1200;
+    var clock_buf = [1]u8{0} ** 6;
+    var delay = std.time.milliTimestamp();
+    while (true) {
+        const new_delay = std.time.milliTimestamp();
+        if (new_delay - delay >= 100) {
+            times_up -= 1;
+            std.debug.print("\r{s}", .{clockStr(&clock_buf, times_up)});
+            delay = new_delay;
+        }
+        if (times_up == 0)
+            break;
+    }
+
+    // terminal keyboard input
     var input_b: [1]u8 = undefined;
     var stdin_reader = std.fs.File.stdin().reader(&input_b);
     const stdin = &stdin_reader.interface;
+
+    // only accept 'L' for previous, 'R' or ' ' for next
     while (input_b[0] != 'q') {
         // std.debug.print("{}\r", .{try stdin.takeByte()});
         const char = try stdin.takeByte();
