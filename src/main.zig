@@ -17,72 +17,6 @@ test "ansi clear" {
     // std.debug.print(CLS ++ SAVE_POS ++ "screen cleared\n\n\n\nOne is here" ++ LOAD_POS ++ "Two is here? \n\n\n\n\nPoop" ++ ORIGIN_POS, .{});
 }
 
-const ex_pgn =
-    \\[White "Guest7527675399"]
-    \\[Black "Guest4401176224"]
-    \\[Result "1-0"]
-    \\[TimeControl "180"]
-    \\[WhiteElo "400"]
-    \\[BlackElo "400"]
-    \\[Termination "Guest7527675399 won by checkmate"]
-    \\[Link "https://www.chess.com/game/143827314072"]
-    \\
-    \\1. Nh3 {[%clk 0:02:59.1][%timestamp 9]} 1... d5 {[%clk 0:02:56.5][%timestamp
-    \\35]} 2. d3 {[%clk 0:02:58.6][%timestamp 5]} 2... Bxh3 {[%clk
-    \\0:02:54.4][%timestamp 21]} 3. gxh3 {[%clk 0:02:57.7][%timestamp 9]} 3... Qc8
-    \\{[%clk 0:02:53.4][%timestamp 10]} 4. Bg2 {[%clk 0:02:57.2][%timestamp 5]} 4...
-    \\c6 {[%clk 0:02:51.3][%timestamp 21]} 5. c4 {[%clk 0:02:56.5][%timestamp 7]} 5...
-    \\Nf6 {[%clk 0:02:48.7][%timestamp 26]} 6. cxd5 {[%clk 0:02:55.6][%timestamp 9]}
-    \\6... Nxd5 {[%clk 0:02:48.6][%timestamp 1]} 7. Bxd5 {[%clk 0:02:54.9][%timestamp
-    \\7]} 7... c5 {[%clk 0:02:47.9][%timestamp 7]} 8. Qa4+ {[%clk
-    \\0:02:53.6][%timestamp 13]} 8... Nc6 {[%clk 0:02:45.9][%timestamp 20]} 9. Bxc6+
-    \\{[%clk 0:02:52.5][%timestamp 11]} 9... bxc6 {[%clk 0:02:44.9][%timestamp 10]}
-    \\10. Nc3 {[%clk 0:02:47.6][%timestamp 49]} 10... Kd7 {[%clk 0:02:41.3][%timestamp
-    \\36]} 11. Ne4 {[%clk 0:02:46.4][%timestamp 12]} 11... e6 {[%clk
-    \\0:02:38.7][%timestamp 26]} 12. Nxc5+ {[%clk 0:02:45.4][%timestamp 10]} 12...
-    \\Bxc5 {[%clk 0:02:37.3][%timestamp 14]} 13. d4 {[%clk 0:02:42.8][%timestamp 26]}
-    \\13... Bd6 {[%clk 0:02:34.6][%timestamp 27]} 14. e4 {[%clk 0:02:41][%timestamp
-    \\18]} 14... Kc7 {[%clk 0:02:31.6][%timestamp 30]} 15. e5 {[%clk
-    \\0:02:39.7][%timestamp 13]} 15... Be7 {[%clk 0:02:30.2][%timestamp 14]} 16. Qa5+
-    \\{[%clk 0:02:36.4][%timestamp 33]} 16... Kd7 {[%clk 0:02:28.6][%timestamp 16]}
-    \\17. Bd2 {[%clk 0:02:32.8][%timestamp 36]} 17... Qb7 {[%clk 0:02:23.4][%timestamp
-    \\52]} 18. b3 {[%clk 0:02:27.6][%timestamp 52]} 18... Rab8 {[%clk
-    \\0:02:18.1][%timestamp 53]} 19. Rb1 {[%clk 0:02:20.7][%timestamp 69]} 19... Bb4
-    \\{[%clk 0:02:17.6][%timestamp 5]} 20. Bxb4 {[%clk 0:02:18.8][%timestamp 19]}
-    \\20... Qxb4+ {[%clk 0:02:16.7][%timestamp 9]} 21. Qxb4 {[%clk
-    \\0:02:16.8][%timestamp 20]} 21... Rxb4 {[%clk 0:02:16.4][%timestamp 3]} 22. Ke2
-    \\{[%clk 0:02:13.5][%timestamp 33]} 22... Rxd4 {[%clk 0:02:15][%timestamp 14]} 23.
-    \\Rhc1 {[%clk 0:02:11][%timestamp 25]} 23... Re4+ {[%clk 0:02:13.3][%timestamp
-    \\17]} 24. Kf3 {[%clk 0:02:09.1][%timestamp 19]} 24... Rxe5 {[%clk
-    \\0:02:12.5][%timestamp 8]} 25. b4 {[%clk 0:02:07.6][%timestamp 15]} 25... Rb8
-    \\{[%clk 0:02:10.6][%timestamp 19]} 26. a3 {[%clk 0:02:06.3][%timestamp 13]} 26...
-    \\Rbb5 {[%clk 0:02:09.6][%timestamp 10]} 27. a4 {[%clk 0:02:04.4][%timestamp 19]}
-    \\27... Rf5+ {[%clk 0:02:08.9][%timestamp 7]} 28. Kg3 {[%clk 0:02:02.8][%timestamp
-    \\16]} 28... Rbd5 {[%clk 0:02:06.7][%timestamp 22]} 29. f3 {[%clk
-    \\0:02:00.7][%timestamp 21]} 29... h5 {[%clk 0:02:04.5][%timestamp 22]} 30. Rc3
-    \\{[%clk 0:01:58.9][%timestamp 18]} 30... Rf6 {[%clk 0:02:03.5][%timestamp 10]}
-    \\31. Rbb3 {[%clk 0:01:57.5][%timestamp 14]} 31... Rg6+ {[%clk
-    \\0:02:02.6][%timestamp 9]} 32. Kf2 {[%clk 0:01:55][%timestamp 25]} 32... h4
-    \\{[%clk 0:02:01.4][%timestamp 12]} 33. b5 {[%clk 0:01:52.6][%timestamp 24]} 33...
-    \\Rd6 {[%clk 0:01:58.5][%timestamp 29]} 34. b6 {[%clk 0:01:50.8][%timestamp 18]}
-    \\34... a6 {[%clk 0:01:56.5][%timestamp 20]} 35. b7 {[%clk 0:01:49.7][%timestamp
-    \\11]} 35... Rd2+ {[%clk 0:01:53.3][%timestamp 32]} 36. Ke3 {[%clk
-    \\0:01:47][%timestamp 27]} 36... Rb2 {[%clk 0:01:45.7][%timestamp 76]} 37. Rxb2
-    \\{[%clk 0:01:44.7][%timestamp 23]} 37... Kc7 {[%clk 0:01:45][%timestamp 7]} 38.
-    \\b8=Q+ {[%clk 0:01:42.7][%timestamp 20]} 38... Kd7 {[%clk 0:01:43.5][%timestamp
-    \\15]} 39. Qb7+ {[%clk 0:01:39.4][%timestamp 33]} 39... Kd6 {[%clk
-    \\0:01:41.2][%timestamp 23]} 40. Qxc6+ {[%clk 0:01:38.7][%timestamp 7]} 40... Ke5
-    \\{[%clk 0:01:40.1][%timestamp 11]} 41. Rc5+ {[%clk 0:01:37][%timestamp 17]} 41...
-    \\Kf6 {[%clk 0:01:39.1][%timestamp 10]} 42. Qe4 {[%clk 0:01:28.3][%timestamp 87]}
-    \\42... Rg5 {[%clk 0:01:36.8][%timestamp 23]} 43. Rxg5 {[%clk
-    \\0:01:26.5][%timestamp 18]} 43... Kxg5 {[%clk 0:01:35.3][%timestamp 15]} 44. Qe5+
-    \\{[%clk 0:01:24.8][%timestamp 17]} 44... f5 {[%clk 0:01:33.1][%timestamp 22]} 45.
-    \\Qxe6 {[%clk 0:01:23.4][%timestamp 14]} 45... g6 {[%clk 0:01:32.4][%timestamp 7]}
-    \\46. Rb6 {[%clk 0:01:21.9][%timestamp 15]} 46... f4+ {[%clk 0:01:29.6][%timestamp
-    \\28]} 47. Kf2 {[%clk 0:01:19.8][%timestamp 21]} 47... Kh5 {[%clk
-    \\0:01:28.2][%timestamp 14]} 48. Qxg6# {[%clk 0:01:18.7][%timestamp 11]} 1-0
-;
-
 const Pieces = enum(u8) {
     nada = '.',
     P = 'P',
@@ -98,11 +32,6 @@ const Pieces = enum(u8) {
     q = 'q',
     k = 'k',
 };
-
-test "value of enum" {
-    const w = Pieces.b;
-    std.debug.print("\n{c}\n", .{@intFromEnum(w)});
-}
 
 // x = +
 // x = #
@@ -182,36 +111,6 @@ const Player = struct {
             .king = Piece.activate(4, main_rank),
         };
     }
-    // give the square of the player piece that can jump to the `to` square (assuming the move is valid, we don't check if `to` is empty)
-    // fn findPiece(self: Player, board: []const Pieces, piece: Pieces, to: Square, attacking: bool) ?Square {
-    //     return switch (piece) {
-    //         .K, .k => if (self.king.alive) self.king.square else null,
-    //         .P, .p => findp: {
-    //             if (!attacking) {
-    //                 for (self.pawn) |p| {
-    //                     if (p.alive and p.square.file == to.file) {
-    //                         var sqr_i = p.square.boardIndex();
-    //                         // distance to next rank (if +/-2, make sure its at starting rank)
-    //                         const dist: i4 = to.rank - p.square.rank;
-    //                         if (piece == .P and dist > 0) {
-    //                             if (dist == 2 and p.square.rank == 1)
-    //                         }
-    //                         if (p.square.rank == if (piece == .P) 1 else 6)
-    //                         if (board[sqr_i] == .nada) {
-    //                             break :findp p.square;
-    //                         }
-    //                     }
-    //                 }
-    //             }
-    //             break :findp null;
-    //         },
-    //         else => null,
-    //     };
-    // }
-    // give the pawn index and what to transfer it into
-    // fn promote(self: *Player, pindex: usize) void {
-    //     _ = self.pawn[pindex].take();
-    // }
 };
 
 const ChessUnicode = enum(u21) { K = 0x2654, Q, R, B, N, P, k, q, r, b, n, p };
@@ -256,28 +155,7 @@ fn clockStr(buf: *[6]u8, time: u32) []const u8 {
     return std.fmt.bufPrint(&buf.*, "0:{:0>2}.{:1}", .{ s, t }) catch unreachable;
 }
 
-test "print clock" {
-    var clock_buf = [1]u8{33} ** 6;
-    std.debug.print("\n{s}\n", .{clockStr(&clock_buf, 611)});
-    std.debug.print("{s}\n", .{clockStr(&clock_buf, 35_999)});
-    std.debug.print("{s}\n", .{clockStr(&clock_buf, 257)});
-}
 
-test "find piece squares" {
-    std.debug.print("\n", .{});
-    const game: Game = .{};
-    const p1 = Player.init(false);
-    const moves = [2]Square{
-        .default,
-        .{ .file = 4, .rank = 3 },
-    };
-    const move_piece = [2]Pieces{ .K, .P };
-    const move_atk = [2]bool{ false, false };
-    for (0..2) |i| {
-        const res = p1.findPiece(&game.board, move_piece[i], moves[i], move_atk[i]);
-        std.debug.print("{c} {s}\n", .{ @intFromEnum(move_piece[i]), if (res) |r| &r.str() else "none" });
-    }
-}
 
 // for the purposes of updating the screen
 const Change = struct {
@@ -302,67 +180,6 @@ const Change = struct {
 // 6. advance to next change
 
 // piece that moves always leaves behind a blank tile
-
-test "slice of a slice" {
-    const yup = "yup";
-    // const y = yup[0..];
-    const yslice: []const u8 = yup;
-    const z = yslice[1..2];
-    std.debug.print("{s}", .{@typeName(@TypeOf(z))});
-}
-
-test "pieces enum" {
-    // const p = Pieces.B;
-    std.debug.print("\n{c}\n", .{@typeInfo(Pieces).@"enum".fields[0].value});
-}
-
-test "parse seven character move" {
-    const move_text = "Qa6xb7#";
-    const str: []const u8 = &[_]u8{ 'A', 'L' };
-    std.debug.print("\n{s}\n{s}\n", .{ move_text, str });
-}
-
-fn test_find_squares(move_text: []const u8) void {
-    // use string before checks, checkmate, or promotion symbols appear
-    const sqr_sec_end = std.mem.indexOfNone(u8, move_text, "KQRNBabcdefgh12345678x");
-    const sqr_sec = if (sqr_sec_end) |end| move_text[0..end] else move_text[0..];
-    std.debug.print("reading from \"{s}\" - ", .{sqr_sec});
-    // have room to potentially read 1-2 squares
-    var is_attack = false;
-    var file_count: u2, var rank_count: u2 = .{ 0, 0 };
-    var sqr1, var sqr2 = .{ Square.default, Square.default };
-    // bxc5: b5, c5
-    for (sqr_sec) |ch| {
-        if (ch >= 'a' and ch <= 'h') {
-            if (file_count == 0) {
-                sqr1.file = @truncate(ch - 'a');
-                sqr2.file = sqr1.file;
-            } else {
-                sqr2.file = @truncate(ch - 'a');
-            }
-            file_count += 1;
-        } else if (ch >= '1' and ch <= '8') {
-            if (rank_count == 0) {
-                sqr1.rank = @truncate(ch - '1');
-                sqr2.rank = sqr1.rank;
-            } else {
-                sqr2.rank = @truncate(ch - '1');
-            }
-            rank_count += 1;
-        } else if (ch == 'x') {
-            is_attack = true;
-        }
-    }
-    std.debug.print("{s} to {s}\n", .{ sqr1.str(), sqr2.str() });
-}
-
-test "detect disambiguating moves" {
-    std.debug.print("\n", .{});
-    const moves = [_][]const u8{ "Kb6", "Bgxh7", "Qb2f6" };
-    for (moves) |m| {
-        test_find_squares(m);
-    }
-}
 
 // object that holds the info for what was read from a PGN file
 const PgnReader = struct {
@@ -672,131 +489,6 @@ const PgnReader = struct {
     }
 };
 
-test "new" {
-    // grab file and open
-    const file = try std.fs.cwd().openFile("test-pgn/ex_game.txt", .{});
-    var buf: [1024]u8 = undefined;
-    var file_reader = file.reader(&buf); // var because you are editing the contents through file_out
-    const file_out = &file_reader.interface; // const because you aren't changing readers
-
-    const Meta = struct {
-        const Self = @This();
-        tag: []const u8,
-        value: []const u8,
-        end: bool,
-        const empty: Self = .{
-            .tag = &.{},
-            .value = &.{},
-            .end = false,
-        };
-        fn read_tag(self: *Self, reader: *std.Io.Reader) ![]const u8 {
-            const erm: []const u8 = try reader.peekDelimiterExclusive(' ');
-            self.tag = erm;
-            return erm;
-        }
-        fn read_value(self: *Self, reader: *std.Io.Reader) ![]const u8 {
-            const tmp: []const u8 = try reader.peekDelimiterExclusive('"');
-            self.value = tmp;
-            return tmp;
-        }
-    };
-
-    // read tags and values
-    var data = Meta.empty;
-    std.debug.print("\nReading file...\n", .{});
-    while (true) {
-        _ = try file_out.discardDelimiterInclusive('[');
-        std.debug.print("{s} ", .{try data.read_tag(file_out)});
-        _ = try file_out.discardDelimiterInclusive('"');
-        std.debug.print("{s} ", .{try data.read_value(file_out)});
-        _ = try file_out.discardDelimiterInclusive('\n');
-        const next_line = try file_out.peekDelimiterExclusive('\n');
-        std.debug.print("\n(next has {} characters)\n", .{next_line.len});
-        if (next_line.len <= 1) {
-            break;
-        }
-    }
-    std.debug.print("what is left in buffer:{s}\n", .{file_out.buffered()});
-}
-
-test "read file into slice" {
-    // open file
-    const cwd = std.fs.cwd();
-    const file = try cwd.openFile("ugh", .{
-        .mode = .read_only,
-    });
-    defer file.close();
-    // find out the size in bytes
-    const stats = try file.stat();
-    std.debug.print("file is {} bytes?\n", .{stats.size});
-    // read after knowing the size
-    const content = try std.testing.allocator.alloc(u8, stats.size);
-    defer std.testing.allocator.free(content);
-    _ = try std.fs.cwd().readFile("test.txt", content);
-    std.debug.print("{s}\nWow! Incredible!\n", .{content});
-}
-
-test "PGN tokenize" {
-    std.debug.print("in the works\n", .{});
-    // use split somehow (maybe splitAny for " ,")
-    // std.mem.tokenizeScalar(comptime T: type, buffer: []const T, delimiter: T)
-    // std.mem.splitScalar(comptime T: type, buffer: []const T, delimiter: T)
-    // example chess game PGN with timestamps
-
-    // reads the meta data
-    var it = std.mem.splitSequence(u8, ex_pgn[0..], "\n");
-    // var read_meta = true;
-    token_loop: while (it.next()) |token| {
-        std.debug.print("tkn: {s}{any}\n", .{
-            if (token.len > 0) switch (token[0]) {
-                '[' => std.mem.trim(u8, token, "[]"),
-                else => "()",
-            } else { // empty line indicates moves are to now be read
-                // read_meta = false;
-                break :token_loop;
-            },
-            token,
-        });
-    }
-    // read move data
-    const move_txt = try std.mem.Allocator.dupe(std.testing.allocator, u8, it.rest());
-    defer std.testing.allocator.free(move_txt);
-
-    // replace newlines so tokens can be done by ". " and not ".\n" mess it up
-    std.mem.replaceScalar(u8, move_txt, '\n', ' ');
-    var move_it = std.mem.tokenizeSequence(u8, move_txt, ". ");
-    while (move_it.next()) |tkn| {
-        var move_parts_it = std.mem.tokenizeAny(u8, tkn, " \n");
-        var count: usize = 0;
-        std.debug.print("\"", .{});
-        while (move_parts_it.next()) |tkn_part| : (count += 1) {
-            switch (count) {
-                0 => {
-                    // const move = std.mem.trimEnd(u8, tkn_part, "0123456789. ");
-                    std.debug.print("{s}", .{tkn_part});
-                },
-                2 => {
-                    var clock = std.mem.zeroes([1024]u8);
-                    const cutOff = std.mem.indexOfNone(u8, tkn_part, "0123456789:.").?;
-                    _ = try std.fmt.bufPrint(&clock, "{s}", .{tkn_part[0..cutOff]});
-                    std.debug.print(" {s}", .{clock});
-                },
-                3 => {
-                    const wait = std.fmt.parseUnsigned(usize, std.mem.trim(u8, tkn_part, "]} "), 10) catch blk: {
-                        std.debug.print("Invalid timestamp!\n", .{});
-                        break :blk 1;
-                    };
-                    std.debug.print(" {}", .{wait});
-                },
-                else => {
-                    // show = false;
-                },
-            }
-        }
-        std.debug.print("\"\n", .{});
-    }
-}
-
 // PGN reader
 pub fn main() !void {
     var gpa = std.heap.DebugAllocator(.{}).init;
@@ -850,4 +542,94 @@ pub fn main() !void {
         }
     }
     std.debug.print("\n", .{});
+}
+
+// tests
+
+test "parse seven character move" {
+    const move_text = "Qa6xb7#";
+    const str: []const u8 = &[_]u8{ 'A', 'L' };
+    std.debug.print("\n{s}\n{s}\n", .{ move_text, str });
+}
+
+test "print clock" {
+    var clock_buf = [1]u8{33} ** 6;
+    std.debug.print("\n{s}\n", .{clockStr(&clock_buf, 611)});
+    std.debug.print("{s}\n", .{clockStr(&clock_buf, 35_999)});
+    std.debug.print("{s}\n", .{clockStr(&clock_buf, 257)});
+}
+
+test "find piece squares" {
+    std.debug.print("\n", .{});
+    const game: Game = .{};
+    const p1 = Player.init(false);
+    const moves = [2]Square{
+        .default,
+        .{ .file = 4, .rank = 3 },
+    };
+    const move_piece = [2]Pieces{ .K, .P };
+    const move_atk = [2]bool{ false, false };
+    for (0..2) |i| {
+        const res = p1.findPiece(&game.board, move_piece[i], moves[i], move_atk[i]);
+        std.debug.print("{c} {s}\n", .{ @intFromEnum(move_piece[i]), if (res) |r| &r.str() else "none" });
+    }
+}
+
+fn test_find_squares(move_text: []const u8) void {
+    // use string before checks, checkmate, or promotion symbols appear
+    const sqr_sec_end = std.mem.indexOfNone(u8, move_text, "KQRNBabcdefgh12345678x");
+    const sqr_sec = if (sqr_sec_end) |end| move_text[0..end] else move_text[0..];
+    std.debug.print("reading from \"{s}\" - ", .{sqr_sec});
+    // have room to potentially read 1-2 squares
+    var is_attack = false;
+    var file_count: u2, var rank_count: u2 = .{ 0, 0 };
+    var sqr1, var sqr2 = .{ Square.default, Square.default };
+    // bxc5: b5, c5
+    for (sqr_sec) |ch| {
+        if (ch >= 'a' and ch <= 'h') {
+            if (file_count == 0) {
+                sqr1.file = @truncate(ch - 'a');
+                sqr2.file = sqr1.file;
+            } else {
+                sqr2.file = @truncate(ch - 'a');
+            }
+            file_count += 1;
+        } else if (ch >= '1' and ch <= '8') {
+            if (rank_count == 0) {
+                sqr1.rank = @truncate(ch - '1');
+                sqr2.rank = sqr1.rank;
+            } else {
+                sqr2.rank = @truncate(ch - '1');
+            }
+            rank_count += 1;
+        } else if (ch == 'x') {
+            is_attack = true;
+        }
+    }
+    std.debug.print("{s} to {s}\n", .{ sqr1.str(), sqr2.str() });
+}
+
+test "detect disambiguating moves" {
+    std.debug.print("\n", .{});
+    const moves = [_][]const u8{ "Kb6", "Bgxh7", "Qb2f6" };
+    for (moves) |m| {
+        test_find_squares(m);
+    }
+}
+
+test "read file into slice" {
+    // open file
+    const cwd = std.fs.cwd();
+    const file = try cwd.openFile("ugh", .{
+        .mode = .read_only,
+    });
+    defer file.close();
+    // find out the size in bytes
+    const stats = try file.stat();
+    std.debug.print("file is {} bytes?\n", .{stats.size});
+    // read after knowing the size
+    const content = try std.testing.allocator.alloc(u8, stats.size);
+    defer std.testing.allocator.free(content);
+    _ = try std.fs.cwd().readFile("test.txt", content);
+    std.debug.print("{s}\nWow! Incredible!\n", .{content});
 }
