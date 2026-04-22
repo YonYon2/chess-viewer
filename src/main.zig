@@ -1,14 +1,15 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
-const ESC = "\u{1b}";
-const CSI = ESC ++ "[";
+const CSI = "\x1b[";
 const CLS = CSI ++ "2J";
 const SAVE_POS = CSI ++ "s";
 const LOAD_POS = CSI ++ "u";
 const RESET_POS = CSI ++ "H";
+// use this for runtime version and just pass the arguments
+const GOTO_FMT = CSI ++ "{};{}H";
 
-fn cursorGoto(row: comptime_int, col: comptime_int) []const u8 {
+fn cursorGoto(comptime row: u3, comptime col: u3) []const u8 {
     return CSI ++ std.fmt.comptimePrint("{};{}H", .{ row, col });
 }
 
@@ -142,6 +143,13 @@ const Game = struct {
         break :blk result;
     },
     flip: bool = false,
+    fn printBoard(self: Self) void {
+        for (self.board, 0..) |P, i| {
+            if (i % 8 == 0)
+                std.debug.print("\n", .{});
+            std.debug.print("{c}", .{@intFromEnum(P)});
+        }
+    }
 };
 
 // convert tenths of a second amount into the format: mm:ss OR ss.t When less than 20 seconds
@@ -340,6 +348,8 @@ const PgnReader = struct {
                                         hold_change.to = sqr1;
                                         // update player's pieces
                                         players[player_i].king.square = sqr1;
+                                        game.board[hold_change.from.boardIndex()] = .nada;
+                                        game.board[sqr1.boardIndex()] = hold_change.mover;
                                     },
                                     .P, .p => {
                                         // pawn movement always 1,1
@@ -347,42 +357,46 @@ const PgnReader = struct {
                                             if (p.alive and p.square.file == sqr1.file) {
                                                 const sqr_o = p.square.boardIndex();
                                                 if (!is_attack) {
-                                                    const sqr_i = if (is_white) sqr_o + 8 else sqr_o - 8;
+                                                    const sqr_check = if (is_white) sqr_o + 8 else sqr_o - 8;
                                                     // ONLY thing that matters is if 1 space in front of pawn is empty, for both 1 hop and 2 hop pawns
-                                                    if (game.board[sqr_i] == .nada) {
+                                                    if (game.board[sqr_check] == .nada) {
                                                         hold_change.from = p.square;
                                                         hold_change.to = sqr1;
                                                         p.square = sqr1;
                                                         game.board[sqr_o] = .nada;
-                                                        game.board[sqr_i] = hold_change.mover;
+                                                        game.board[sqr1.boardIndex()] = hold_change.mover;
                                                         break;
                                                     }
                                                 } else {
+// file2 > file1 = +1 else -1
                                                     // check 1 square diagonal towards the `to` square
                                                     // hm integer overflow
                                                     const file_dir = sqr2.file > sqr1.file;
-                                                    std.debug.print("<{}", .{sqr_o});
                                                     var sqr_i = if (is_white) sqr_o + 8 else sqr_o - 8;
                                                     if (file_dir) {
                                                         sqr_i += 1;
                                                     } else sqr_i -= 1;
-                                                    std.debug.print(", {} {c} 8 {c} 1>", .{ if (is_white) sqr_i - 8 else sqr_i + 8, if (is_white) @as(u8, '+') else @as(u8, '-'), if (file_dir) @as(u8, '+') else @as(u8, '-') });
+                                                    // std.debug.print(", {} {c} 8 {c} 1>", .{ if (is_white) sqr_i - 8 else sqr_i + 8, if (is_white) @as(u8, '+') else @as(u8, '-'), if (file_dir) @as(u8, '+') else @as(u8, '-') });
 
                                                     // also check for en passant
                                                     const enpass_index = if (file_dir) sqr_o + 1 else sqr_o - 1;
-                                                    hold_change.enpassant = game.board[enpass_index] == hold_change.mover;
-                                                    std.debug.print("enpass? {s}, ", .{if (hold_change.enpassant) "YES" else "NO"});
+                                                    std.debug.print("<({c}) @ enpass>", .{@intFromEnum(game.board[enpass_index])});
+                                                    std.debug.print("<({c}) @ capture>", .{@intFromEnum(game.board[sqr_i])});
+                                                    hold_change.enpassant = if (is_white) game.board[enpass_index] == .p else game.board[enpass_index] == .P;
+                                                    // std.debug.print("enpass? {s}, ", .{if (hold_change.enpassant) "YES" else "NO"});
                                                     if (game.board[sqr_i] != .nada or hold_change.enpassant) {
+                                                        std.debug.print("<from {} to {}, en?{}>", .{sqr_o, if (is_white) sqr_i - 8 else sqr_i + 8, hold_change.enpassant});
                                                         hold_change.from = p.square;
                                                         hold_change.to = sqr2;
                                                         p.square = sqr2;
-                                                        hold_change.replace = if (game.board[sqr_i] != .nada) game.board[sqr_i] else game.board[enpass_index];
+                                                        hold_change.replace = if (hold_change.enpassant) game.board[enpass_index] else game.board[sqr2.boardIndex()];
                                                         game.board[sqr_o] = .nada;
-                                                        game.board[sqr_i] = hold_change.mover;
+                                                        game.board[sqr2.boardIndex()] = hold_change.mover;
                                                         if (hold_change.enpassant)
                                                             game.board[enpass_index] = .nada;
                                                         break;
                                                     }
+                                                    // game.board[sqr_i] = .K;
                                                 }
                                             }
                                         }
@@ -395,7 +409,8 @@ const PgnReader = struct {
                             // add move
                             try move_list.append(allocator, hold_change);
                             // std.debug.print("{any} ", .{hold_change});
-                            std.debug.print("{s} ", .{move_text});
+                            game.printBoard();
+                            // std.debug.print("{s} ", .{move_text});
                             start_read = false;
                             mode = .clock;
                         }
@@ -456,7 +471,7 @@ const PgnReader = struct {
         _ = self;
     }
     fn drawInit(self: Self) void {
-        std.debug.print(CLS ++ RESET_POS, .{});
+        std.debug.print(CLS ++ GOTO_FMT , .{1,1});
         for (Game.initial_board, 0..) |P, i| {
             if (i % 8 == 0)
                 std.debug.print("\n", .{});
@@ -478,6 +493,25 @@ const PgnReader = struct {
         }
     }
     fn drawNext(self: *Self) void {
+        if (self.current_move >= self.move_list.items.len)
+            return;
+        const curr = self.move_list.items[self.current_move];
+        // move mover
+        std.debug.print( GOTO_FMT ++ "." ++ GOTO_FMT ++ "{c}", .{
+            @as(u32, curr.from.rank)+2, 
+            @as(u32, curr.from.file)+1, 
+            @as(u32, curr.to.rank)+2, 
+            @as(u32, curr.to.file)+1, 
+            @intFromEnum(curr.mover),
+        });
+        // enpassant
+        if (curr.enpassant) {
+            std.debug.print( GOTO_FMT ++ ".", .{
+                @as(u32, curr.from.rank)+2,
+                @as(u32, curr.to.file)+2,
+            });
+        }
+        std.debug.print(LOAD_POS, .{});
         self.current_move += 1;
     }
     fn drawPrev(self: *Self) void {
@@ -514,22 +548,29 @@ pub fn main() !void {
     my_pgn.drawInit();
     // std.debug.print("\n", .{});
 
-    var times_up: u32 = 1200;
-    var clock_buf = [1]u8{0} ** 6;
-    var delay = std.time.milliTimestamp();
-    while (true) {
-        const new_delay = std.time.milliTimestamp();
-        if (new_delay - delay >= 100) {
-            times_up -= 1;
-            std.debug.print("\r{s}", .{clockStr(&clock_buf, times_up)});
-            delay = new_delay;
-        }
-        if (times_up == 0)
-            break;
-    }
+    // var times_up: u32 = 1200;
+    // var clock_buf = [1]u8{0} ** 6;
+    // var delay = std.time.milliTimestamp();
+    // while (true) {
+    //     const new_delay = std.time.milliTimestamp();
+    //     if (new_delay - delay >= 100) {
+    //         times_up -= 1;
+    //         std.debug.print("\r{s}", .{clockStr(&clock_buf, times_up)});
+    //         delay = new_delay;
+    //     }
+    //     if (times_up == 0)
+    //         break;
+    // }
+
+    // disable line input mode so newline does not keep scrolling the screen down
+    // const handle = try std.os.windows.GetStdHandle(std.os.windows.STD_INPUT_HANDLE);
+    // var mode: u32 = undefined;
+    // _ = std.os.windows.kernel32.GetConsoleMode(handle, &mode);
+    // const LINE_INPUT: std.os.windows.DWORD, const ECHO_INPUT: std.os.windows.DWORD = .{2, 4};
+    // _ = std.os.windows.kernel32.SetConsoleMode(handle, mode | ~(LINE_INPUT | ECHO_INPUT));
 
     // terminal keyboard input
-    var input_b: [1]u8 = undefined;
+    var input_b: [1]u8 = undefined;//"q".*;
     var stdin_reader = std.fs.File.stdin().reader(&input_b);
     const stdin = &stdin_reader.interface;
 
