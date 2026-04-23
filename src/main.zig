@@ -200,6 +200,19 @@ const Change = struct {
     enpassant: bool = false, // replace will redo the piece to the left/right of the pawn
     delay: u32 = 1, // tenths of a second
 };
+// forward -> {from, to, mover, enpass, check, castle}
+// backward -> {from, to, mover, replace, enpass, check, castle}
+
+// I realize that it is more important to remember what to directly print rather than game info to deduce inside the function
+// so to ease the amount of logic
+const ChangeV2 = struct {
+    from: Square = .default,
+    to: Square = .default,
+    mover: Pieces = .nada,
+    eaten: Pieces = .nada,
+    drop: []const u8 = GOTO_FMT ++ BG_RGB ++ FG_RGB ++ "  ",
+    land: []const u8 = GOTO_FMT ++ BG_RGB ++ FG_RGB ++ "{u} ",
+};
 // order of iterating through changes:
 // 1. read `delay`
 // 2. wait for `delay` time elapsed
@@ -218,7 +231,7 @@ const PgnReader = struct {
     const color_bg2: [3]u8 = .{ 0xe9, 0xea, 0xce }; // #e9eace
     const color_highlight1: [3]u8 = .{ 0xb9, 0xca, 0x43 }; // #b9ca43
     const color_highlight2: [3]u8 = .{ 0xf5, 0xf6, 0x82 }; // #f5f682
-    const color_white: [3]u8 = .{ 0xf9, 0xf9, 0xf9 }; // #f9f9f9
+    const color_white: [3]u8 = .{ 0, 0, 0 }; //.{ 0xf9, 0xf9, 0xf9 }; // #f9f9f9
     const color_black: [3]u8 = .{ 0x57, 0x54, 0x52 }; // #575452
     const color_defeat: [3]u8 = .{ 0xff, 0, 0 };
     const color_victory: [3]u8 = .{ 0, 0xff, 0 };
@@ -505,7 +518,10 @@ const PgnReader = struct {
         for (Game.initial_board, 0..) |P, i| {
             if (i % 8 == 0)
                 std.debug.print("\n", .{});
-            const tile_c = if ((i + (i / 8 % 2)) % 2 == 0) color_bg1 else color_bg2;
+            const r = i / 8;
+            const f = i % 8;
+            // const tile_c = if ((i + (i / 8 % 2)) % 2 == 0) color_bg1 else color_bg2;
+            const tile_c = if ((r -% f) % 2 == 0) color_bg1 else color_bg2;
             const piece_c = if (std.ascii.isUpper(P)) color_white else color_black;
             const piece_e: Pieces = @enumFromInt(P);
             std.debug.print(BG_RGB ++ FG_RGB ++ "{u} " ++ RESET_COL, .{
@@ -533,25 +549,25 @@ const PgnReader = struct {
         if (self.current_move >= self.move_list.items.len)
             return;
         // reverse effects of previous updates
-        if (self.current_move > 0) {
-            const prev = self.move_list.items[self.current_move - 1];
-        }
+        // if (self.current_move > 0) {
+        //     const prev = self.move_list.items[self.current_move - 1];
+        // }
         const curr = self.move_list.items[self.current_move];
         // move mover
         const piece_c = if (self.current_move % 2 == 0) color_white else color_black;
         // highlight to and from squares
-        const left_c = if (curr.from.file % 2 == 0 and curr.from.rank % 2 == 0) color_highlight1 else color_highlight2;
-        const replace_c = if (curr.to.file % 2 == 0 and curr.to.rank % 2 == 0) color_highlight1 else color_highlight2;
+        const left_c = if ((curr.from.rank -% curr.from.file) % 2 == 0) color_bg1 else color_bg2;
+        const replace_c = if ((curr.to.rank -% curr.to.file) % 2 == 0) color_bg1 else color_bg2;
         std.debug.print(GOTO_FMT ++ BG_RGB ++ "  " ++ GOTO_FMT ++ BG_RGB ++ FG_RGB ++ "{u} ", .{
-            @as(u32, curr.from.rank) + 2, @as(u32, curr.from.file) + 1 + 2, left_c[0],    left_c[1],               left_c[2],
-            @as(u32, curr.to.rank) + 2,   @as(u32, curr.to.file) + 1 + 2,   replace_c[0], replace_c[1],            replace_c[2],
+            @as(u32, curr.from.rank) + 2, 2 * @as(u32, curr.from.file) + 1, replace_c[0], replace_c[1],            replace_c[2],
+            @as(u32, curr.to.rank) + 2,   2 * @as(u32, curr.to.file) + 1,   left_c[0],    left_c[1],               left_c[2],
             piece_c[0],                   piece_c[1],                       piece_c[2],   curr.mover.getUnicode(),
         });
         // enpassant
         if (curr.enpassant) {
             std.debug.print(GOTO_FMT ++ " ", .{
                 @as(u32, curr.from.rank) + 2,
-                @as(u32, curr.to.file) + 2,
+                2 * @as(u32, curr.to.file) + 1,
             });
         }
         std.debug.print(LOAD_POS, .{});
@@ -617,6 +633,18 @@ pub fn main() !void {
     var my_pgn = try PgnReader.init(allocator, fname);
     defer my_pgn.deinit();
     my_pgn.drawInit();
+    for (0..8) |row| {
+        for (0..8) |col| {
+            const replace_c = if ((row -% col) % 2 == 0) PgnReader.color_bg1 else PgnReader.color_bg2;
+            std.debug.print(GOTO_FMT ++ BG_RGB ++ "  ", .{
+                row + 2,
+                2 * col + 1,
+                replace_c[0],
+                replace_c[1],
+                replace_c[2],
+            });
+        }
+    }
     // std.debug.print("\n", .{});
 
     // var times_up: u32 = 1200;
@@ -661,6 +689,9 @@ pub fn main() !void {
 }
 
 // tests
+test "print two seperate color squares?" {
+    std.debug.print("\n" ++ GOTO_FMT ++ FG_RGB ++ BG_RGB ++ "GG" ++ GOTO_FMT ++ BG_RGB ++ FG_RGB ++ "PP\n" ++ RESET_COL, .{ 2, 2, 0, 0, 255, 255, 0, 0, 3, 3, 0, 255, 0, 255, 255, 255 });
+}
 
 test "ansi rgb color" {
     std.debug.print("\n" ++ CSI ++ "38;2;255;0;0m", .{});
