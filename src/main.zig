@@ -6,6 +6,9 @@ const CLS = CSI ++ "2J";
 const SAVE_POS = CSI ++ "s";
 const LOAD_POS = CSI ++ "u";
 const RESET_POS = CSI ++ "H";
+const RESET_COL = CSI ++ "m";
+const FG_RGB = CSI ++ "38;2;{};{};{}m";
+const BG_RGB = CSI ++ "48;2;{};{};{}m";
 // use this for runtime version and just pass the arguments
 const GOTO_FMT = CSI ++ "{};{}H";
 
@@ -18,21 +21,51 @@ test "ansi clear" {
     // std.debug.print(CLS ++ SAVE_POS ++ "screen cleared\n\n\n\nOne is here" ++ LOAD_POS ++ "Two is here? \n\n\n\n\nPoop" ++ ORIGIN_POS, .{});
 }
 
+const ChessUnicode = enum(u21) { K = 0x2654, Q, R, B, N, P, k, q, r, b, n, p };
+
+test "print chess" {
+    std.debug.print("\nKing {u}\n", .{@intFromEnum(ChessUnicode.K)});
+    inline for (@typeInfo(ChessUnicode).@"enum".fields) |e| {
+        std.debug.print("{s} = {u}\n", .{ e.name, e.value });
+    }
+}
+
 const Pieces = enum(u8) {
     nada = '.',
-    P = 'P',
-    N = 'N',
-    B = 'B',
-    R = 'R',
-    Q = 'Q',
     K = 'K',
-    p = 'p',
-    n = 'n',
-    b = 'b',
-    r = 'r',
-    q = 'q',
+    Q = 'Q',
+    R = 'R',
+    B = 'B',
+    N = 'N',
+    P = 'P',
     k = 'k',
+    q = 'q',
+    r = 'r',
+    b = 'b',
+    n = 'n',
+    p = 'p',
+    fn getUnicode(self: Pieces) u21 {
+        return switch (self) {
+            .K => @intFromEnum(ChessUnicode.K),
+            .Q => @intFromEnum(ChessUnicode.Q),
+            .R => @intFromEnum(ChessUnicode.R),
+            .B => @intFromEnum(ChessUnicode.B),
+            .N => @intFromEnum(ChessUnicode.N),
+            .P => @intFromEnum(ChessUnicode.P),
+            .k => @intFromEnum(ChessUnicode.k),
+            .q => @intFromEnum(ChessUnicode.q),
+            .r => @intFromEnum(ChessUnicode.r),
+            .b => @intFromEnum(ChessUnicode.b),
+            .n => @intFromEnum(ChessUnicode.n),
+            .p => @intFromEnum(ChessUnicode.p),
+            else => ' ',
+        };
+    }
 };
+
+test "pieces rpint?" {
+    std.debug.print("{u}", .{Pieces.B.getUnicode()});
+}
 
 // x = +
 // x = #
@@ -114,15 +147,6 @@ const Player = struct {
     }
 };
 
-const ChessUnicode = enum(u21) { K = 0x2654, Q, R, B, N, P, k, q, r, b, n, p };
-
-test "print chess" {
-    std.debug.print("\nKing {u}\n", .{@intFromEnum(ChessUnicode.K)});
-    inline for (@typeInfo(ChessUnicode).@"enum".fields) |e| {
-        std.debug.print("{s} = {u}\n", .{ e.name, e.value });
-    }
-}
-
 // reference for understanding how to read PGN moves
 // https://www.saremba.de/chessgml/standards/pgn/pgn-complete.htm
 const Game = struct {
@@ -163,8 +187,6 @@ fn clockStr(buf: *[6]u8, time: u32) []const u8 {
     return std.fmt.bufPrint(&buf.*, "0:{:0>2}.{:1}", .{ s, t }) catch unreachable;
 }
 
-
-
 // for the purposes of updating the screen
 const Change = struct {
     from: Square = .default,
@@ -192,6 +214,14 @@ const Change = struct {
 // object that holds the info for what was read from a PGN file
 const PgnReader = struct {
     const Self = @This();
+    const color_bg1: [3]u8 = .{ 0x69, 0x92, 0x3E }; // #69923E
+    const color_bg2: [3]u8 = .{ 0xe9, 0xea, 0xce }; // #e9eace
+    const color_highlight1: [3]u8 = .{ 0xb9, 0xca, 0x43 }; // #b9ca43
+    const color_highlight2: [3]u8 = .{ 0xf5, 0xf6, 0x82 }; // #f5f682
+    const color_white: [3]u8 = .{ 0xf9, 0xf9, 0xf9 }; // #f9f9f9
+    const color_black: [3]u8 = .{ 0x57, 0x54, 0x52 }; // #575452
+    const color_defeat: [3]u8 = .{ 0xff, 0, 0 };
+    const color_victory: [3]u8 = .{ 0, 0xff, 0 };
     allocator: Allocator,
     game_info: Game,
     current_move: usize = 0,
@@ -368,7 +398,7 @@ const PgnReader = struct {
                                                         break;
                                                     }
                                                 } else {
-// file2 > file1 = +1 else -1
+                                                    // file2 > file1 = +1 else -1
                                                     // check 1 square diagonal towards the `to` square
                                                     // hm integer overflow
                                                     const file_dir = sqr2.file > sqr1.file;
@@ -385,7 +415,7 @@ const PgnReader = struct {
                                                     hold_change.enpassant = if (is_white) game.board[enpass_index] == .p else game.board[enpass_index] == .P;
                                                     // std.debug.print("enpass? {s}, ", .{if (hold_change.enpassant) "YES" else "NO"});
                                                     if (game.board[sqr_i] != .nada or hold_change.enpassant) {
-                                                        std.debug.print("<from {} to {}, en?{}>", .{sqr_o, if (is_white) sqr_i - 8 else sqr_i + 8, hold_change.enpassant});
+                                                        std.debug.print("<from {} to {}, en?{}>", .{ sqr_o, if (is_white) sqr_i - 8 else sqr_i + 8, hold_change.enpassant });
                                                         hold_change.from = p.square;
                                                         hold_change.to = sqr2;
                                                         p.square = sqr2;
@@ -471,11 +501,18 @@ const PgnReader = struct {
         _ = self;
     }
     fn drawInit(self: Self) void {
-        std.debug.print(CLS ++ GOTO_FMT , .{1,1});
+        std.debug.print(CLS ++ GOTO_FMT, .{ 1, 1 });
         for (Game.initial_board, 0..) |P, i| {
             if (i % 8 == 0)
                 std.debug.print("\n", .{});
-            std.debug.print("{c}", .{P});
+            const tile_c = if ((i + (i / 8 % 2)) % 2 == 0) color_bg1 else color_bg2;
+            const piece_c = if (std.ascii.isUpper(P)) color_white else color_black;
+            const piece_e: Pieces = @enumFromInt(P);
+            std.debug.print(BG_RGB ++ FG_RGB ++ "{u} " ++ RESET_COL, .{
+                tile_c[0],            tile_c[1],  tile_c[2],
+                piece_c[0],           piece_c[1], piece_c[2],
+                piece_e.getUnicode(),
+            });
         }
         // save the input line position
         std.debug.print("\n\n" ++ SAVE_POS ++ "Input:", .{});
@@ -495,20 +532,26 @@ const PgnReader = struct {
     fn drawNext(self: *Self) void {
         if (self.current_move >= self.move_list.items.len)
             return;
+        // reverse effects of previous updates
+        if (self.current_move > 0) {
+            const prev = self.move_list.items[self.current_move - 1];
+        }
         const curr = self.move_list.items[self.current_move];
         // move mover
-        std.debug.print( GOTO_FMT ++ "." ++ GOTO_FMT ++ "{c}", .{
-            @as(u32, curr.from.rank)+2, 
-            @as(u32, curr.from.file)+1, 
-            @as(u32, curr.to.rank)+2, 
-            @as(u32, curr.to.file)+1, 
-            @intFromEnum(curr.mover),
+        const piece_c = if (self.current_move % 2 == 0) color_white else color_black;
+        // highlight to and from squares
+        const left_c = if (curr.from.file % 2 == 0 and curr.from.rank % 2 == 0) color_highlight1 else color_highlight2;
+        const replace_c = if (curr.to.file % 2 == 0 and curr.to.rank % 2 == 0) color_highlight1 else color_highlight2;
+        std.debug.print(GOTO_FMT ++ BG_RGB ++ "  " ++ GOTO_FMT ++ BG_RGB ++ FG_RGB ++ "{u} ", .{
+            @as(u32, curr.from.rank) + 2, @as(u32, curr.from.file) + 1 + 2, left_c[0],    left_c[1],               left_c[2],
+            @as(u32, curr.to.rank) + 2,   @as(u32, curr.to.file) + 1 + 2,   replace_c[0], replace_c[1],            replace_c[2],
+            piece_c[0],                   piece_c[1],                       piece_c[2],   curr.mover.getUnicode(),
         });
         // enpassant
         if (curr.enpassant) {
-            std.debug.print( GOTO_FMT ++ ".", .{
-                @as(u32, curr.from.rank)+2,
-                @as(u32, curr.to.file)+2,
+            std.debug.print(GOTO_FMT ++ " ", .{
+                @as(u32, curr.from.rank) + 2,
+                @as(u32, curr.to.file) + 2,
             });
         }
         std.debug.print(LOAD_POS, .{});
@@ -520,6 +563,29 @@ const PgnReader = struct {
     }
     fn deinit(self: *Self) void {
         self.move_list.deinit(self.allocator);
+    }
+};
+
+// so I can view the colors
+const RGBWheel = struct {
+    const Self = @This();
+    rgb: [3]u8 = .{ 255, 0, 0 },
+    climb: bool = false,
+    phase: usize = 0,
+    fn scroll(self: *Self) void {
+        if (!self.climb) {
+            const next_c = (self.phase + 1) % 3;
+            self.rgb[next_c] += 1;
+            if (self.rgb[next_c] == 255) {
+                self.climb = true;
+            }
+        } else {
+            self.rgb[self.phase] -= 1;
+            if (self.rgb[self.phase] == 0) {
+                self.climb = false;
+                self.phase = (self.phase + 1) % 3;
+            }
+        }
     }
 };
 
@@ -543,6 +609,11 @@ pub fn main() !void {
         return;
     }
 
+    // enable unicode code page
+    const original_cp = std.os.windows.kernel32.GetConsoleOutputCP();
+    _ = std.os.windows.kernel32.SetConsoleOutputCP(65001);
+    defer _ = std.os.windows.kernel32.SetConsoleOutputCP(original_cp);
+
     var my_pgn = try PgnReader.init(allocator, fname);
     defer my_pgn.deinit();
     my_pgn.drawInit();
@@ -551,6 +622,7 @@ pub fn main() !void {
     // var times_up: u32 = 1200;
     // var clock_buf = [1]u8{0} ** 6;
     // var delay = std.time.milliTimestamp();
+
     // while (true) {
     //     const new_delay = std.time.milliTimestamp();
     //     if (new_delay - delay >= 100) {
@@ -562,6 +634,7 @@ pub fn main() !void {
     //         break;
     // }
 
+    // probably not needed
     // disable line input mode so newline does not keep scrolling the screen down
     // const handle = try std.os.windows.GetStdHandle(std.os.windows.STD_INPUT_HANDLE);
     // var mode: u32 = undefined;
@@ -570,7 +643,7 @@ pub fn main() !void {
     // _ = std.os.windows.kernel32.SetConsoleMode(handle, mode | ~(LINE_INPUT | ECHO_INPUT));
 
     // terminal keyboard input
-    var input_b: [1]u8 = undefined;//"q".*;
+    var input_b: [1]u8 = undefined; //"q".*;
     var stdin_reader = std.fs.File.stdin().reader(&input_b);
     const stdin = &stdin_reader.interface;
 
@@ -580,12 +653,18 @@ pub fn main() !void {
         const char = try stdin.takeByte();
         if (char == 'R' or char == ' ') {
             my_pgn.drawNext();
+        } else if (char == 'L') {
+            my_pgn.drawPrev();
         }
     }
     std.debug.print("\n", .{});
 }
 
 // tests
+
+test "ansi rgb color" {
+    std.debug.print("\n" ++ CSI ++ "38;2;255;0;0m", .{});
+}
 
 test "parse seven character move" {
     const move_text = "Qa6xb7#";
