@@ -12,23 +12,53 @@ const BG_RGB = CSI ++ "48;2;{};{};{}m";
 // use this for runtime version and just pass the arguments
 const GOTO_FMT = CSI ++ "{};{}H";
 
-fn cursorGoto(comptime row: u3, comptime col: u3) []const u8 {
-    return CSI ++ std.fmt.comptimePrint("{};{}H", .{ row, col });
+// colors used to draw pieces, squares, etc.
+const bg1: [3]u8 = .{ 0x69, 0x92, 0x3E }; // #69923E
+const bg2: [3]u8 = .{ 0xe9, 0xea, 0xce }; // #e9eace
+const highlight1: [3]u8 = .{ 0xb9, 0xca, 0x43 }; // #b9ca43
+const highlight2: [3]u8 = .{ 0xf5, 0xf6, 0x82 }; // #f5f682
+const white: [3]u8 = .{ 0, 0, 0 }; // unicode is mostly blank so a dark outline would help it #f9f9f9
+const black: [3]u8 = .{ 0x57, 0x54, 0x52 }; // #575452
+const defeat: [3]u8 = .{ 0xff, 0, 0 };
+const victory: [3]u8 = .{ 0, 0xff, 0 };
+
+// meant for the below wrapper
+const FG_FMT = CSI ++ "38;2;{}m";
+const BG_FMT = CSI ++ "48;2;{}m";
+/// A wrapper so that with any tuple of RGB values you can print its values to `Writer`
+fn Color(comptime RGB: [3]u8) type {
+    return struct {
+        const Self = @This();
+        /// exists so you intialize with `Color(bg1).c` instead of `Color(bg1){}` so less visual clutter
+        const c: Color(RGB) = .{};
+        pick: [3]u8 = RGB,
+        /// all this just so I dont have to write out all three elements of the array 
+        pub fn format(
+            self: Self,
+            writer: *std.Io.Writer,
+        ) std.Io.Writer.Error!void {
+            try writer.print("{};{};{}", .{self.pick[0], self.pick[1], self.pick[2]});
+        }
+    };
 }
 
-test "ansi clear" {
-    std.debug.print(CLS ++ RESET_POS ++ "Yup\n" ++ cursorGoto(3, 3) ++ "mid!", .{});
-    // std.debug.print(CLS ++ SAVE_POS ++ "screen cleared\n\n\n\nOne is here" ++ LOAD_POS ++ "Two is here? \n\n\n\n\nPoop" ++ ORIGIN_POS, .{});
+// need to figure out how to output the text version everytime so it doesnt stick the emoji one and spoil the style
+test "pawn as emoji and text" {
+    // const p_u21 = @intFromEnum(ChessUnicode.p);
+    const pawn_base = "♟";
+    const pawn_base_v15 = "♟︎";
+    const pawn_base_emoji = "♟️";
+    std.debug.print("\nBase {s}\nBase+V15 {s}\nEmoji {s}\n", .{pawn_base, pawn_base_v15, pawn_base_emoji});
+}
+
+test "color format showcase" {
+    // const col: Color(bg1) = .{};
+    std.debug.print( "\n\x1b[48;2;{f}m!\n", .{Color(bg1).c});
+    std.debug.print( "\n\x1b[48;2;{f}m?\n", .{Color(.{101, 25, 135}).c});
+    std.debug.print( RESET_COL, .{});
 }
 
 const ChessUnicode = enum(u21) { K = 0x2654, Q, R, B, N, P, k, q, r, b, n, p };
-
-test "print chess" {
-    std.debug.print("\nKing {u}\n", .{@intFromEnum(ChessUnicode.K)});
-    inline for (@typeInfo(ChessUnicode).@"enum".fields) |e| {
-        std.debug.print("{s} = {u}\n", .{ e.name, e.value });
-    }
-}
 
 const Pieces = enum(u8) {
     nada = '.',
@@ -63,28 +93,6 @@ const Pieces = enum(u8) {
     }
 };
 
-test "pieces rpint?" {
-    std.debug.print("{u}", .{Pieces.B.getUnicode()});
-}
-
-// x = +
-// x = #
-// O-O +
-// O-O #
-
-test "print piece letters" {
-    std.debug.print("\nbegin\n", .{});
-    inline for (@typeInfo(Pieces).@"enum".fields) |e| {
-        std.debug.print("{s} ", .{e.name});
-    }
-    std.debug.print("\nend\n", .{});
-}
-
-// invariants:
-// active piece { alive, file rank are valid values from 1 to 8 or a to h}
-// dead piece { !alive, file rank are either a1 or some previous value but are not to be used}
-// init: always dead piece unless you provide a file and rank
-
 const Square = struct {
     const Self = @This();
     file: u3,
@@ -99,11 +107,6 @@ const Square = struct {
         return @as(usize, self.rank) * 8 + self.file;
     }
 };
-
-test "e4 printed" {
-    const p: Square = .{ .file = 4, .rank = 3 };
-    std.debug.print("\nPawn to {s}\n", .{p.str()});
-}
 
 const Piece = struct {
     const Self = @This();
@@ -189,6 +192,8 @@ fn clockStr(buf: *[6]u8, time: u32) []const u8 {
 
 // for the purposes of updating the screen
 const Change = struct {
+    const Self = @This();
+    flip: bool = false,
     from: Square = .default,
     to: Square = .default,
     mover: Pieces = .nada,
@@ -199,20 +204,28 @@ const Change = struct {
     check: bool = false, // will be used to highlight the opposing king
     enpassant: bool = false, // replace will redo the piece to the left/right of the pawn
     delay: u32 = 1, // tenths of a second
+    /// blanks the from square with the correct background color and at the correct cursor position, accounting for flip
+    fn printBlank(self: Self) void {
+        { // did this so row in the next block is not shadowed
+            const sqr_c = if ((self.from.rank -% self.from.file) % 2 == 0) bg1 else bg2;
+            const row: u32, const col: u32 = self.from;
+            std.debug.print(BG_FMT ++ GOTO_FMT ++ "  ", .{ sqr_c, row + 2, 2 * col + 1 });
+        }
+        if (self.enpassant) {
+            // take the file of `to` and the rank of `from`  
+            const enpass_c = if ((self.from.rank -% self.to.file) % 2 == 0) bg1 else bg2;
+            const row: u32, const col: u32 = .{ self.from.rank, self.to.file };
+            std.debug.print( BG_FMT ++ GOTO_FMT ++ "  ", .{ enpass_c, row + 2, 2 * col + 1});
+        }
+    }
+    /// establish the piece with its background color, foreground color, and cursor position from its square and flip's value
+    fn printPiece(self: Self) void {
+        const piece_c = if (std.ascii.isUpper(@intFromEnum(self.mover))) white else black;
+        const sqr_c = if ((self.to.rank -% self.to.file) % 2 == 0) bg1 else bg2;
+        std.debug.print(BG_FMT ++ FG_FMT ++ GOTO_FMT ++ "{u} ", .{ sqr_c, piece_c, @as(u32, self.from.rank) + 2, 2 * @as(u32, self.from.file) + 1, self.mover.getUnicode() });
+    }
 };
-// forward -> {from, to, mover, enpass, check, castle}
-// backward -> {from, to, mover, replace, enpass, check, castle}
 
-// I realize that it is more important to remember what to directly print rather than game info to deduce inside the function
-// so to ease the amount of logic
-const ChangeV2 = struct {
-    from: Square = .default,
-    to: Square = .default,
-    mover: Pieces = .nada,
-    eaten: Pieces = .nada,
-    drop: []const u8 = GOTO_FMT ++ BG_RGB ++ FG_RGB ++ "  ",
-    land: []const u8 = GOTO_FMT ++ BG_RGB ++ FG_RGB ++ "{u} ",
-};
 // order of iterating through changes:
 // 1. read `delay`
 // 2. wait for `delay` time elapsed
@@ -227,14 +240,6 @@ const ChangeV2 = struct {
 // object that holds the info for what was read from a PGN file
 const PgnReader = struct {
     const Self = @This();
-    const color_bg1: [3]u8 = .{ 0x69, 0x92, 0x3E }; // #69923E
-    const color_bg2: [3]u8 = .{ 0xe9, 0xea, 0xce }; // #e9eace
-    const color_highlight1: [3]u8 = .{ 0xb9, 0xca, 0x43 }; // #b9ca43
-    const color_highlight2: [3]u8 = .{ 0xf5, 0xf6, 0x82 }; // #f5f682
-    const color_white: [3]u8 = .{ 0, 0, 0 }; //.{ 0xf9, 0xf9, 0xf9 }; // #f9f9f9
-    const color_black: [3]u8 = .{ 0x57, 0x54, 0x52 }; // #575452
-    const color_defeat: [3]u8 = .{ 0xff, 0, 0 };
-    const color_victory: [3]u8 = .{ 0, 0xff, 0 };
     allocator: Allocator,
     game_info: Game,
     current_move: usize = 0,
@@ -520,9 +525,8 @@ const PgnReader = struct {
                 std.debug.print("\n", .{});
             const r = i / 8;
             const f = i % 8;
-            // const tile_c = if ((i + (i / 8 % 2)) % 2 == 0) color_bg1 else color_bg2;
-            const tile_c = if ((r -% f) % 2 == 0) color_bg1 else color_bg2;
-            const piece_c = if (std.ascii.isUpper(P)) color_white else color_black;
+            const tile_c = if ((r -% f) % 2 == 0) bg1 else bg2;
+            const piece_c = if (std.ascii.isUpper(P)) white else black;
             const piece_e: Pieces = @enumFromInt(P);
             std.debug.print(BG_RGB ++ FG_RGB ++ "{u} " ++ RESET_COL, .{
                 tile_c[0],            tile_c[1],  tile_c[2],
@@ -554,21 +558,26 @@ const PgnReader = struct {
         // }
         const curr = self.move_list.items[self.current_move];
         // move mover
-        const piece_c = if (self.current_move % 2 == 0) color_white else color_black;
+        const piece_c = if (self.current_move % 2 == 0) white else black;
         // highlight to and from squares
-        const left_c = if ((curr.from.rank -% curr.from.file) % 2 == 0) color_bg1 else color_bg2;
-        const replace_c = if ((curr.to.rank -% curr.to.file) % 2 == 0) color_bg1 else color_bg2;
-        std.debug.print(GOTO_FMT ++ BG_RGB ++ "  " ++ GOTO_FMT ++ BG_RGB ++ FG_RGB ++ "{u} ", .{
-            @as(u32, curr.from.rank) + 2, 2 * @as(u32, curr.from.file) + 1, replace_c[0], replace_c[1],            replace_c[2],
-            @as(u32, curr.to.rank) + 2,   2 * @as(u32, curr.to.file) + 1,   left_c[0],    left_c[1],               left_c[2],
-            piece_c[0],                   piece_c[1],                       piece_c[2],   curr.mover.getUnicode(),
+        const left_c = if ((curr.from.rank -% curr.from.file) % 2 == 0) bg1 else bg2;
+        std.debug.print(BG_RGB ++ GOTO_FMT ++ "  ", .{
+            left_c[0], left_c[1], left_c[2],
+            @as(u32, curr.from.rank) + 2, 2 * @as(u32, curr.from.file) + 1,
+        });
+        const replace_c = if ((curr.to.rank -% curr.to.file) % 2 == 0) bg1 else bg2;
+        std.debug.print(BG_RGB ++ FG_RGB ++ GOTO_FMT ++ "{u} ", .{
+            replace_c[0], replace_c[1], replace_c[2],
+            piece_c[0], piece_c[1], piece_c[2],
+            @as(u32, curr.to.rank) + 2,   2 * @as(u32, curr.to.file) + 1,
+            curr.mover.getUnicode(),
         });
         // enpassant
         if (curr.enpassant) {
-            std.debug.print(GOTO_FMT ++ " ", .{
-                @as(u32, curr.from.rank) + 2,
-                2 * @as(u32, curr.to.file) + 1,
-            });
+            // std.debug.print(BG_RGB ++ GOTO_FMT ++ "  ", .{
+            //     @as(u32, curr.from.rank) + 2,
+            //     2 * @as(u32, curr.to.file) + 1,
+            // });
         }
         std.debug.print(LOAD_POS, .{});
         self.current_move += 1;
@@ -633,18 +642,19 @@ pub fn main() !void {
     var my_pgn = try PgnReader.init(allocator, fname);
     defer my_pgn.deinit();
     my_pgn.drawInit();
-    for (0..8) |row| {
-        for (0..8) |col| {
-            const replace_c = if ((row -% col) % 2 == 0) PgnReader.color_bg1 else PgnReader.color_bg2;
-            std.debug.print(GOTO_FMT ++ BG_RGB ++ "  ", .{
-                row + 2,
-                2 * col + 1,
-                replace_c[0],
-                replace_c[1],
-                replace_c[2],
-            });
-        }
-    }
+    defer std.debug.print(RESET_COL ++ "\n", .{});
+    // for (0..8) |row| {
+    //     for (0..8) |col| {
+    //         const replace_c = if ((row -% col) % 2 == 0) PgnReader.bg1 else PgnReader.bg2;
+    //         std.debug.print(GOTO_FMT ++ BG_RGB ++ "  ", .{
+    //             row + 2,
+    //             2 * col + 1,
+    //             replace_c[0],
+    //             replace_c[1],
+    //             replace_c[2],
+    //         });
+    //     }
+    // }
     // std.debug.print("\n", .{});
 
     // var times_up: u32 = 1200;
