@@ -22,40 +22,51 @@ const black: [3]u8 = .{ 0x57, 0x54, 0x52 }; // #575452
 const defeat: [3]u8 = .{ 0xff, 0, 0 };
 const victory: [3]u8 = .{ 0, 0xff, 0 };
 
+fn colorFmt(comptime color: [3]u8) []const u8 {
+    return std.fmt.comptimePrint("{};{};{}", .{ color[0], color[1], color[2] });
+}
+
 // meant for the below wrapper
-const FG_FMT = CSI ++ "38;2;{}m";
-const BG_FMT = CSI ++ "48;2;{}m";
+const FG_FMT = CSI ++ "38;2;{f}m";
+const BG_FMT = CSI ++ "48;2;{f}m";
+// scratch that, it is only comptime bc of type and we can't do switch or change the type because of runtime value
+const BG_FMT2 = CSI ++ "48;2;{s}m";
+const FG_FMT2 = CSI ++ "38;2;{s}m";
+
 /// A wrapper so that with any tuple of RGB values you can print its values to `Writer`
-fn Color(comptime RGB: [3]u8) type {
+fn Color(RGB: [3]u8) type {
     return struct {
         const Self = @This();
         /// exists so you intialize with `Color(bg1).c` instead of `Color(bg1){}` so less visual clutter
         const c: Color(RGB) = .{};
         pick: [3]u8 = RGB,
-        /// all this just so I dont have to write out all three elements of the array 
+        /// all this just so I dont have to write out all three elements of the array
         pub fn format(
             self: Self,
             writer: *std.Io.Writer,
         ) std.Io.Writer.Error!void {
-            try writer.print("{};{};{}", .{self.pick[0], self.pick[1], self.pick[2]});
+            try writer.print("{};{};{}", .{ self.pick[0], self.pick[1], self.pick[2] });
         }
     };
+}
+
+test "color format showcase" {
+    // const col: Color(bg1) = .{};
+    std.debug.print("\n" ++ BG_FMT ++ "!\n", .{Color(bg1).c});
+    std.debug.print("\n\x1b[48;2;{f}m?\n", .{Color(.{ 101, 25, 135 }).c});
+    // simpler version
+    const tim = std.time.timestamp();
+    std.debug.print("\n" ++ BG_FMT2 ++ ";\n", .{if (@mod(tim, 2) == 0) colorFmt(highlight1) else colorFmt(highlight2)});
+    std.debug.print(RESET_COL, .{});
 }
 
 // need to figure out how to output the text version everytime so it doesnt stick the emoji one and spoil the style
 test "pawn as emoji and text" {
     // const p_u21 = @intFromEnum(ChessUnicode.p);
-    const pawn_base = "♟";
+    const pawn_base = "♟\u{fe0e}";
     const pawn_base_v15 = "♟︎";
     const pawn_base_emoji = "♟️";
-    std.debug.print("\nBase {s}\nBase+V15 {s}\nEmoji {s}\n", .{pawn_base, pawn_base_v15, pawn_base_emoji});
-}
-
-test "color format showcase" {
-    // const col: Color(bg1) = .{};
-    std.debug.print( "\n\x1b[48;2;{f}m!\n", .{Color(bg1).c});
-    std.debug.print( "\n\x1b[48;2;{f}m?\n", .{Color(.{101, 25, 135}).c});
-    std.debug.print( RESET_COL, .{});
+    std.debug.print("\nBase {s}\nBase+V15 {s}\nEmoji {s}\n", .{ pawn_base, pawn_base_v15, pawn_base_emoji });
 }
 
 const ChessUnicode = enum(u21) { K = 0x2654, Q, R, B, N, P, k, q, r, b, n, p };
@@ -74,24 +85,29 @@ const Pieces = enum(u8) {
     b = 'b',
     n = 'n',
     p = 'p',
-    fn getUnicode(self: Pieces) u21 {
+    fn str(self: Pieces) []const u8 {
         return switch (self) {
-            .K => @intFromEnum(ChessUnicode.K),
-            .Q => @intFromEnum(ChessUnicode.Q),
-            .R => @intFromEnum(ChessUnicode.R),
-            .B => @intFromEnum(ChessUnicode.B),
-            .N => @intFromEnum(ChessUnicode.N),
-            .P => @intFromEnum(ChessUnicode.P),
-            .k => @intFromEnum(ChessUnicode.k),
-            .q => @intFromEnum(ChessUnicode.q),
-            .r => @intFromEnum(ChessUnicode.r),
-            .b => @intFromEnum(ChessUnicode.b),
-            .n => @intFromEnum(ChessUnicode.n),
-            .p => @intFromEnum(ChessUnicode.p),
-            else => ' ',
+            .K => std.fmt.comptimePrint("{u} ", .{@intFromEnum(ChessUnicode.K)}),
+            .Q => std.fmt.comptimePrint("{u} ", .{@intFromEnum(ChessUnicode.Q)}),
+            .R => std.fmt.comptimePrint("{u} ", .{@intFromEnum(ChessUnicode.R)}),
+            .B => std.fmt.comptimePrint("{u} ", .{@intFromEnum(ChessUnicode.B)}),
+            .N => std.fmt.comptimePrint("{u} ", .{@intFromEnum(ChessUnicode.N)}),
+            .P => std.fmt.comptimePrint("{u} ", .{@intFromEnum(ChessUnicode.P)}),
+            .k => std.fmt.comptimePrint("{u} ", .{@intFromEnum(ChessUnicode.k)}),
+            .q => std.fmt.comptimePrint("{u} ", .{@intFromEnum(ChessUnicode.q)}),
+            .r => std.fmt.comptimePrint("{u} ", .{@intFromEnum(ChessUnicode.r)}),
+            .b => std.fmt.comptimePrint("{u} ", .{@intFromEnum(ChessUnicode.b)}),
+            .n => std.fmt.comptimePrint("{u} ", .{@intFromEnum(ChessUnicode.n)}),
+            .p => "♟︎ ", // has VS15 unicode block to make text and not emoji
+            .nada => "  ",
         };
     }
 };
+
+test "print black pawn unicode text" {
+    const p = Pieces.p;
+    std.debug.print("{s}", .{p.str()});
+}
 
 const Square = struct {
     const Self = @This();
@@ -205,24 +221,46 @@ const Change = struct {
     enpassant: bool = false, // replace will redo the piece to the left/right of the pawn
     delay: u32 = 1, // tenths of a second
     /// blanks the from square with the correct background color and at the correct cursor position, accounting for flip
-    fn printBlank(self: Self) void {
-        { // did this so row in the next block is not shadowed
-            const sqr_c = if ((self.from.rank -% self.from.file) % 2 == 0) bg1 else bg2;
-            const row: u32, const col: u32 = self.from;
-            std.debug.print(BG_FMT ++ GOTO_FMT ++ "  ", .{ sqr_c, row + 2, 2 * col + 1 });
+    fn printBlank(self: Self, reverse: bool) void {
+        if (reverse) {
+            const p_enpass = if (self.enpassant) Pieces.nada else self.replace;
+            const piece_c = if (std.ascii.isUpper(@intFromEnum(self.replace))) colorFmt(white) else colorFmt(black);
+            const sqr_c = if ((self.to.rank -% self.to.file) % 2 == 0) colorFmt(bg1) else colorFmt(bg2);
+            const row: u32 = self.to.rank;
+            const col: u32 = self.to.file;
+            std.debug.print(LOAD_POS ++ "<{c}>", .{@intFromEnum(self.replace)});
+            std.debug.print(BG_FMT2 ++ FG_FMT2 ++ GOTO_FMT ++ "{s}", .{ sqr_c, piece_c, row + 2, 2 * col + 1, p_enpass.str() });
+        } else {
+            const sqr_c = if ((self.from.rank -% self.from.file) % 2 == 0) colorFmt(bg1) else colorFmt(bg2);
+            const row: u32, const col: u32 = .{ self.from.rank, self.from.file };
+            std.debug.print(BG_FMT2 ++ GOTO_FMT ++ "  ", .{ sqr_c, row + 2, 2 * col + 1 });
         }
         if (self.enpassant) {
-            // take the file of `to` and the rank of `from`  
-            const enpass_c = if ((self.from.rank -% self.to.file) % 2 == 0) bg1 else bg2;
+            // take the file of `to` and the rank of `from`
+            const enpass_c = if ((self.from.rank -% self.to.file) % 2 == 0) colorFmt(bg1) else colorFmt(bg2);
+            const piece_c = if (std.ascii.isUpper(@intFromEnum(self.replace))) colorFmt(white) else colorFmt(black);
             const row: u32, const col: u32 = .{ self.from.rank, self.to.file };
-            std.debug.print( BG_FMT ++ GOTO_FMT ++ "  ", .{ enpass_c, row + 2, 2 * col + 1});
+            const p_rev = if (reverse) self.replace else Pieces.nada;
+            std.debug.print(BG_FMT2 ++ FG_FMT2 ++ GOTO_FMT ++ "{s}", .{ enpass_c, piece_c, row + 2, 2 * col + 1, p_rev.str() });
         }
     }
+    // /// resets a captured square with its original piece
+    // fn reprintBlank(self: Self) void {
+    //     const piece_c = if (std.ascii.isUpper(@intFromEnum(self.replace))) colorFmt(white) else colorFmt(black);
+    //     const sqr_c = if ((self.to.rank -% self.to.file) % 2 == 0) colorFmt(bg1) else colorFmt(bg2);
+    //     const row: u32 = self.to.rank;
+    //     const col: u32 = self.to.file;
+    //     std.debug.print(BG_FMT2 ++ FG_FMT2 ++ GOTO_FMT ++ "{s}", .{ sqr_c, piece_c, row + 2, 2 * col + 1, self.replace.str() });
+    // }
     /// establish the piece with its background color, foreground color, and cursor position from its square and flip's value
-    fn printPiece(self: Self) void {
-        const piece_c = if (std.ascii.isUpper(@intFromEnum(self.mover))) white else black;
-        const sqr_c = if ((self.to.rank -% self.to.file) % 2 == 0) bg1 else bg2;
-        std.debug.print(BG_FMT ++ FG_FMT ++ GOTO_FMT ++ "{u} ", .{ sqr_c, piece_c, @as(u32, self.from.rank) + 2, 2 * @as(u32, self.from.file) + 1, self.mover.getUnicode() });
+    fn printPiece(self: Self, reverse: bool) void {
+        const piece_c = if (std.ascii.isUpper(@intFromEnum(self.mover))) colorFmt(white) else colorFmt(black);
+        const condition = if (reverse) (self.from.rank -% self.from.file) % 2 == 0 else (self.to.rank -% self.to.file) % 2 == 0;
+        const sqr_c = if (condition) colorFmt(bg1) else colorFmt(bg2);
+        const row: u32 = if (reverse) self.from.rank else self.to.rank;
+        const col: u32 = if (reverse) self.from.file else self.to.file;
+        const p_rev = self.mover;
+        std.debug.print(BG_FMT2 ++ FG_FMT2 ++ GOTO_FMT ++ "{s}", .{ sqr_c, piece_c, row + 2, 2 * col + 1, p_rev.str() });
     }
 };
 
@@ -428,12 +466,12 @@ const PgnReader = struct {
 
                                                     // also check for en passant
                                                     const enpass_index = if (file_dir) sqr_o + 1 else sqr_o - 1;
-                                                    std.debug.print("<({c}) @ enpass>", .{@intFromEnum(game.board[enpass_index])});
-                                                    std.debug.print("<({c}) @ capture>", .{@intFromEnum(game.board[sqr_i])});
+                                                    // std.debug.print("<({c}) @ enpass>", .{@intFromEnum(game.board[enpass_index])});
+                                                    // std.debug.print("<({c}) @ capture>", .{@intFromEnum(game.board[sqr_i])});
                                                     hold_change.enpassant = if (is_white) game.board[enpass_index] == .p else game.board[enpass_index] == .P;
                                                     // std.debug.print("enpass? {s}, ", .{if (hold_change.enpassant) "YES" else "NO"});
                                                     if (game.board[sqr_i] != .nada or hold_change.enpassant) {
-                                                        std.debug.print("<from {} to {}, en?{}>", .{ sqr_o, if (is_white) sqr_i - 8 else sqr_i + 8, hold_change.enpassant });
+                                                        // std.debug.print("<from {} to {}, en?{}>", .{ sqr_o, if (is_white) sqr_i - 8 else sqr_i + 8, hold_change.enpassant });
                                                         hold_change.from = p.square;
                                                         hold_change.to = sqr2;
                                                         p.square = sqr2;
@@ -457,7 +495,7 @@ const PgnReader = struct {
                             // add move
                             try move_list.append(allocator, hold_change);
                             // std.debug.print("{any} ", .{hold_change});
-                            game.printBoard();
+                            // game.printBoard();
                             // std.debug.print("{s} ", .{move_text});
                             start_read = false;
                             mode = .clock;
@@ -473,7 +511,8 @@ const PgnReader = struct {
                     } else {
                         if (c == ']') {
                             const clock_text = remaining_file[start_index..i];
-                            std.debug.print("{s} ", .{clock_text});
+                            _ = clock_text;
+                            // std.debug.print("{s} ", .{clock_text});
                             start_read = false;
                             mode = .timestamp;
                         }
@@ -488,7 +527,7 @@ const PgnReader = struct {
                     } else {
                         if (c == ']') {
                             const timestamp_number = try std.fmt.parseUnsigned(u32, remaining_file[start_index..i], 10);
-                            std.debug.print("{}\n", .{timestamp_number});
+                            // std.debug.print("{}\n", .{timestamp_number});
                             move_list.items[move_list.items.len - 1].delay = timestamp_number;
                             start_read = false;
                             is_white = !is_white;
@@ -525,14 +564,10 @@ const PgnReader = struct {
                 std.debug.print("\n", .{});
             const r = i / 8;
             const f = i % 8;
-            const tile_c = if ((r -% f) % 2 == 0) bg1 else bg2;
-            const piece_c = if (std.ascii.isUpper(P)) white else black;
+            const tile_c = if ((r -% f) % 2 == 0) colorFmt(bg1) else colorFmt(bg2);
+            const piece_c = if (std.ascii.isUpper(P)) colorFmt(white) else colorFmt(black);
             const piece_e: Pieces = @enumFromInt(P);
-            std.debug.print(BG_RGB ++ FG_RGB ++ "{u} " ++ RESET_COL, .{
-                tile_c[0],            tile_c[1],  tile_c[2],
-                piece_c[0],           piece_c[1], piece_c[2],
-                piece_e.getUnicode(),
-            });
+            std.debug.print(BG_FMT2 ++ FG_FMT2 ++ "{s}" ++ RESET_COL, .{ tile_c, piece_c, piece_e.str() });
         }
         // save the input line position
         std.debug.print("\n\n" ++ SAVE_POS ++ "Input:", .{});
@@ -556,35 +591,22 @@ const PgnReader = struct {
         // if (self.current_move > 0) {
         //     const prev = self.move_list.items[self.current_move - 1];
         // }
-        const curr = self.move_list.items[self.current_move];
+
         // move mover
-        const piece_c = if (self.current_move % 2 == 0) white else black;
-        // highlight to and from squares
-        const left_c = if ((curr.from.rank -% curr.from.file) % 2 == 0) bg1 else bg2;
-        std.debug.print(BG_RGB ++ GOTO_FMT ++ "  ", .{
-            left_c[0], left_c[1], left_c[2],
-            @as(u32, curr.from.rank) + 2, 2 * @as(u32, curr.from.file) + 1,
-        });
-        const replace_c = if ((curr.to.rank -% curr.to.file) % 2 == 0) bg1 else bg2;
-        std.debug.print(BG_RGB ++ FG_RGB ++ GOTO_FMT ++ "{u} ", .{
-            replace_c[0], replace_c[1], replace_c[2],
-            piece_c[0], piece_c[1], piece_c[2],
-            @as(u32, curr.to.rank) + 2,   2 * @as(u32, curr.to.file) + 1,
-            curr.mover.getUnicode(),
-        });
-        // enpassant
-        if (curr.enpassant) {
-            // std.debug.print(BG_RGB ++ GOTO_FMT ++ "  ", .{
-            //     @as(u32, curr.from.rank) + 2,
-            //     2 * @as(u32, curr.to.file) + 1,
-            // });
-        }
+        const curr = self.move_list.items[self.current_move];
+        curr.printPiece(false);
+        curr.printBlank(false);
         std.debug.print(LOAD_POS, .{});
         self.current_move += 1;
     }
     fn drawPrev(self: *Self) void {
-        if (self.current_move > 0)
+        if (self.current_move > 0) {
             self.current_move -= 1;
+        } else return;
+        const curr = self.move_list.items[self.current_move];
+        curr.printPiece(true);
+        curr.printBlank(true);
+        std.debug.print(LOAD_POS, .{});
     }
     fn deinit(self: *Self) void {
         self.move_list.deinit(self.allocator);
@@ -639,23 +661,16 @@ pub fn main() !void {
     _ = std.os.windows.kernel32.SetConsoleOutputCP(65001);
     defer _ = std.os.windows.kernel32.SetConsoleOutputCP(original_cp);
 
+    std.debug.print("new?", .{});
+    const pawn_base = "♟";
+    const pawn_base_v15 = "♟\u{fe0e}";
+    const pawn_base_emoji = "♟️";
+    std.debug.print("\nBase {s}\nBase+V15 {s}\nEmoji {s}\n", .{ pawn_base, pawn_base_v15, pawn_base_emoji });
+
     var my_pgn = try PgnReader.init(allocator, fname);
     defer my_pgn.deinit();
     my_pgn.drawInit();
     defer std.debug.print(RESET_COL ++ "\n", .{});
-    // for (0..8) |row| {
-    //     for (0..8) |col| {
-    //         const replace_c = if ((row -% col) % 2 == 0) PgnReader.bg1 else PgnReader.bg2;
-    //         std.debug.print(GOTO_FMT ++ BG_RGB ++ "  ", .{
-    //             row + 2,
-    //             2 * col + 1,
-    //             replace_c[0],
-    //             replace_c[1],
-    //             replace_c[2],
-    //         });
-    //     }
-    // }
-    // std.debug.print("\n", .{});
 
     // var times_up: u32 = 1200;
     // var clock_buf = [1]u8{0} ** 6;
@@ -673,14 +688,9 @@ pub fn main() !void {
     // }
 
     // probably not needed
-    // disable line input mode so newline does not keep scrolling the screen down
-    // const handle = try std.os.windows.GetStdHandle(std.os.windows.STD_INPUT_HANDLE);
-    // var mode: u32 = undefined;
-    // _ = std.os.windows.kernel32.GetConsoleMode(handle, &mode);
-    // const LINE_INPUT: std.os.windows.DWORD, const ECHO_INPUT: std.os.windows.DWORD = .{2, 4};
-    // _ = std.os.windows.kernel32.SetConsoleMode(handle, mode | ~(LINE_INPUT | ECHO_INPUT));
 
     // terminal keyboard input
+    // TODO need to turn off line mode so the byte it taken instantly
     var input_b: [1]u8 = undefined; //"q".*;
     var stdin_reader = std.fs.File.stdin().reader(&input_b);
     const stdin = &stdin_reader.interface;
