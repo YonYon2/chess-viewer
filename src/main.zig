@@ -639,21 +639,53 @@ const RGBWheel = struct {
 // PGN reader
 pub fn main() !void {
     var gpa = std.heap.DebugAllocator(.{}).init;
-    defer _ = gpa.deinit();
     const allocator = gpa.allocator();
+    // dont need to do if it already handles all allocs?
+    // defer {
+    //     std.debug.print("gpa deinit\n", .{});
+    //     _ = gpa.deinit();
+    // }
 
     // going to use this to provide a chess PGN file to replay
     var args = try std.process.argsWithAllocator(allocator);
-    defer args.deinit();
+    defer {
+        std.debug.print("args deinit\n", .{});
+        args.deinit();
+    }
     _ = args.skip(); // skip executable's name
 
+    const help_msg =
+        \\usage: chess_viewer [fname] [options]
+        \\
+        \\  -h show this message
+        \\  -f frame-by-frame by pressing 'R' and 'L' to move forward/backward
+        \\  -e explode
+        \\
+    ;
     var fname: []const u8 = &.{};
+    var frame_play = false;
+    // get filename first
     if (args.next()) |argv| {
         std.debug.print("args was {s}!\n", .{argv});
         fname = argv;
     } else {
-        std.debug.print("Usage: chess-viewer fname", .{});
+        std.debug.print(help_msg, .{});
         return;
+    }
+    //
+    while (args.next()) |arg| {
+        if (arg[0] == '-') {
+            for (arg[1..arg.len]) |ch| {
+                switch (ch) {
+                    'h' => std.debug.print(help_msg, .{}),
+                    'f' => frame_play = true,
+                    else => {},
+                }
+            }
+        } else {
+            std.debug.print("what?\n", .{});
+            return;
+        }
     }
 
     // enable unicode code page
@@ -661,13 +693,17 @@ pub fn main() !void {
     _ = std.os.windows.kernel32.SetConsoleOutputCP(65001);
     defer _ = std.os.windows.kernel32.SetConsoleOutputCP(original_cp);
 
-    std.debug.print("new?", .{});
+    // std.debug.print("new?", .{});
     const pawn_base = "♟";
-    const pawn_base_v15 = "♟\u{fe0e}";
-    const pawn_base_emoji = "♟️";
-    std.debug.print("\nBase {s}\nBase+V15 {s}\nEmoji {s}\n", .{ pawn_base, pawn_base_v15, pawn_base_emoji });
+    const pawn_base_v15 = "\u{265F}\u{fe0e}";
+    const pawn_base_v16 = "\u{265F}\u{fe0f}";
+    // const pawn_base_emoji = "♟️";
+    std.debug.print("\nBase {s}\nDingbat (base+V16) {s}\nEmoji (base+V15) {s}\n", .{ pawn_base, pawn_base_v15, pawn_base_v16 });
 
-    var my_pgn = try PgnReader.init(allocator, fname);
+    var my_pgn = PgnReader.init(allocator, fname) catch |err| {
+        std.debug.print("Error: {t}\n", .{err});
+        return;
+    };
     defer my_pgn.deinit();
     my_pgn.drawInit();
     defer std.debug.print(RESET_COL ++ "\n", .{});
