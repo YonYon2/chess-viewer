@@ -244,14 +244,6 @@ const Change = struct {
             std.debug.print(BG_FMT2 ++ FG_FMT2 ++ GOTO_FMT ++ "{s}", .{ enpass_c, piece_c, row + 2, 2 * col + 1, p_rev.str() });
         }
     }
-    // /// resets a captured square with its original piece
-    // fn reprintBlank(self: Self) void {
-    //     const piece_c = if (std.ascii.isUpper(@intFromEnum(self.replace))) colorFmt(white) else colorFmt(black);
-    //     const sqr_c = if ((self.to.rank -% self.to.file) % 2 == 0) colorFmt(bg1) else colorFmt(bg2);
-    //     const row: u32 = self.to.rank;
-    //     const col: u32 = self.to.file;
-    //     std.debug.print(BG_FMT2 ++ FG_FMT2 ++ GOTO_FMT ++ "{s}", .{ sqr_c, piece_c, row + 2, 2 * col + 1, self.replace.str() });
-    // }
     /// establish the piece with its background color, foreground color, and cursor position from its square and flip's value
     fn printPiece(self: Self, reverse: bool) void {
         const piece_c = if (std.ascii.isUpper(@intFromEnum(self.mover))) colorFmt(white) else colorFmt(black);
@@ -336,7 +328,6 @@ const PgnReader = struct {
         const Modes = enum { move_number, move, clock, timestamp };
         var mode = Modes.move_number;
         // here for the purpose of finding a player's pieces without looking through
-        // TODO potentially don't need this
         var players = [_]Player{ .init(false), .init(true) };
         for (remaining_file, 0..) |c, i| {
             switch (mode) {
@@ -354,146 +345,10 @@ const PgnReader = struct {
                         start_read = true;
                     } else {
                         if (std.ascii.isWhitespace(c)) {
-                            const player_i: usize = @intFromBool(is_white);
-                            const move_text = remaining_file[start_index..i];
-                            var castling = false;
-                            // push to movelist
-                            var hold_change: Change = .{};
-                            // check which piece is moving
-                            hold_change.mover = switch (move_text[0]) {
-                                'K' => if (is_white) .K else .k,
-                                'Q' => if (is_white) .Q else .q,
-                                'R' => if (is_white) .R else .r,
-                                'B' => if (is_white) .B else .b,
-                                'N' => if (is_white) .N else .n,
-                                'O' => lbo: {
-                                    // handle all castling logic since its fixed (except for check and checkmate)
-                                    castling = true;
-                                    const is_castle_long = move_text.len >= 5; //O-O >=3, O-O-O >=5
-                                    const back_rank: u3 = if (is_white) 0 else 7;
-                                    hold_change.from = players[player_i].king.square;
-                                    hold_change.to = .{ .file = if (is_castle_long) 6 else 2, .rank = back_rank };
-                                    // update player king
-                                    players[player_i].king.square = hold_change.to;
-                                    const rook_from_file: u3 = if (is_castle_long) 0 else 7;
-                                    const rook_to_file: u3 = if (is_castle_long) 3 else 5;
-                                    hold_change.castle = .{
-                                        .from = .{ .file = rook_from_file, .rank = back_rank },
-                                        .to = .{ .file = rook_to_file, .rank = back_rank },
-                                    };
-                                    // TODO update player rook (need to loop through all bc there COULD be more than 2 active rooks)
-                                    for (&players[player_i].rook) |*rook| {
-                                        if (rook.alive and rook.square.file == rook_from_file and rook.square.rank == back_rank) {
-                                            rook.square = hold_change.castle.?.to;
-                                            break;
-                                        }
-                                    }
-                                    break :lbo if (is_white) .K else .k;
-                                },
-                                else => if (is_white) .P else .p,
-                            };
-                            // read square and attack portion of the text
-                            const sqr_sec_end = std.mem.indexOfNone(u8, move_text, "KQRNBabcdefgh12345678x");
-                            const sqr_sec = if (sqr_sec_end) |end| move_text[0..end] else move_text[0..];
-                            // have room to potentially read 1-2 squares
-                            var is_attack = false;
-                            var file_count: u2, var rank_count: u2 = .{ 0, 0 };
-                            var sqr1, var sqr2 = .{ Square.default, Square.default };
-                            // bxc5: b5, c5
-                            for (sqr_sec) |ch| {
-                                if (ch >= 'a' and ch <= 'h') {
-                                    if (file_count == 0) {
-                                        sqr1.file = @truncate(ch - 'a');
-                                        sqr2.file = sqr1.file;
-                                    } else {
-                                        sqr2.file = @truncate(ch - 'a');
-                                    }
-                                    file_count += 1;
-                                } else if (ch >= '1' and ch <= '8') {
-                                    if (rank_count == 0) {
-                                        sqr1.rank = @truncate(ch - '1');
-                                        sqr2.rank = sqr1.rank;
-                                    } else {
-                                        sqr2.rank = @truncate(ch - '1');
-                                    }
-                                    rank_count += 1;
-                                } else if (ch == 'x') {
-                                    is_attack = true;
-                                }
-                            }
-                            // file_count, rank_count
-                            // 1,1 (ex. Ke6)            from: <find>,                to: sqr1
-                            // 2,1 or 1,2 (ex. bxc5)    from: sqr1.file | sqr1.rank, to: sqr1
-                            // 2,2 (ex. Qa1xh8#)        from: sqr1,                  to: sqr2
-
-                            // fill in `from`, `to`, `replace` based on the mover (for pawns, depends on attack)
-                            if (!castling) {
-                                switch (hold_change.mover) {
-                                    .K, .k => {
-                                        hold_change.from = players[player_i].king.square;
-                                        hold_change.to = sqr1;
-                                        // update player's pieces
-                                        players[player_i].king.square = sqr1;
-                                        game.board[hold_change.from.boardIndex()] = .nada;
-                                        game.board[sqr1.boardIndex()] = hold_change.mover;
-                                    },
-                                    .P, .p => {
-                                        // pawn movement always 1,1
-                                        for (&players[player_i].pawn) |*p| {
-                                            if (p.alive and p.square.file == sqr1.file) {
-                                                const sqr_o = p.square.boardIndex();
-                                                if (!is_attack) {
-                                                    const sqr_check = if (is_white) sqr_o + 8 else sqr_o - 8;
-                                                    // ONLY thing that matters is if 1 space in front of pawn is empty, for both 1 hop and 2 hop pawns
-                                                    if (game.board[sqr_check] == .nada) {
-                                                        hold_change.from = p.square;
-                                                        hold_change.to = sqr1;
-                                                        p.square = sqr1;
-                                                        game.board[sqr_o] = .nada;
-                                                        game.board[sqr1.boardIndex()] = hold_change.mover;
-                                                        break;
-                                                    }
-                                                } else {
-                                                    // file2 > file1 = +1 else -1
-                                                    // check 1 square diagonal towards the `to` square
-                                                    // hm integer overflow
-                                                    const file_dir = sqr2.file > sqr1.file;
-                                                    var sqr_i = if (is_white) sqr_o + 8 else sqr_o - 8;
-                                                    if (file_dir) {
-                                                        sqr_i += 1;
-                                                    } else sqr_i -= 1;
-                                                    // std.debug.print(", {} {c} 8 {c} 1>", .{ if (is_white) sqr_i - 8 else sqr_i + 8, if (is_white) @as(u8, '+') else @as(u8, '-'), if (file_dir) @as(u8, '+') else @as(u8, '-') });
-
-                                                    // also check for en passant
-                                                    const enpass_index = if (file_dir) sqr_o + 1 else sqr_o - 1;
-                                                    // std.debug.print("<({c}) @ enpass>", .{@intFromEnum(game.board[enpass_index])});
-                                                    // std.debug.print("<({c}) @ capture>", .{@intFromEnum(game.board[sqr_i])});
-                                                    hold_change.enpassant = if (is_white) game.board[enpass_index] == .p else game.board[enpass_index] == .P;
-                                                    // std.debug.print("enpass? {s}, ", .{if (hold_change.enpassant) "YES" else "NO"});
-                                                    if (game.board[sqr_i] != .nada or hold_change.enpassant) {
-                                                        // std.debug.print("<from {} to {}, en?{}>", .{ sqr_o, if (is_white) sqr_i - 8 else sqr_i + 8, hold_change.enpassant });
-                                                        hold_change.from = p.square;
-                                                        hold_change.to = sqr2;
-                                                        p.square = sqr2;
-                                                        hold_change.replace = if (hold_change.enpassant) game.board[enpass_index] else game.board[sqr2.boardIndex()];
-                                                        game.board[sqr_o] = .nada;
-                                                        game.board[sqr2.boardIndex()] = hold_change.mover;
-                                                        if (hold_change.enpassant)
-                                                            game.board[enpass_index] = .nada;
-                                                        break;
-                                                    }
-                                                    // game.board[sqr_i] = .K;
-                                                }
-                                            }
-                                        }
-                                    },
-                                    else => unreachable,
-                                }
-                            }
                             // TODO handle any check, checkmate, or promotion here
-
+                            const res_change = parseMove(&game, &players, is_white, remaining_file[start_index..i]);
                             // add move
-                            try move_list.append(allocator, hold_change);
+                            try move_list.append(allocator, res_change);
                             // std.debug.print("{any} ", .{hold_change});
                             // game.printBoard();
                             // std.debug.print("{s} ", .{move_text});
@@ -502,7 +357,7 @@ const PgnReader = struct {
                         }
                     }
                 },
-                .clock => { // for now can be ignored
+                .timestamp, .clock => {
                     if (!start_read) {
                         if (std.ascii.isDigit(c)) {
                             start_index = i;
@@ -510,33 +365,21 @@ const PgnReader = struct {
                         }
                     } else {
                         if (c == ']') {
-                            const clock_text = remaining_file[start_index..i];
-                            _ = clock_text;
-                            // std.debug.print("{s} ", .{clock_text});
+                            const time_text = remaining_file[start_index..i];
+                            if (mode == .timestamp) {
+                                move_list.items[move_list.items.len - 1].delay = try std.fmt.parseUnsigned(u32, time_text, 10);
+                                is_white = !is_white;
+                                mode = .move_number;
+                            } else {
+                                mode = .timestamp;
+                            }
                             start_read = false;
-                            mode = .timestamp;
-                        }
-                    }
-                },
-                .timestamp => {
-                    if (!start_read) {
-                        if (std.ascii.isDigit(c)) {
-                            start_index = i;
-                            start_read = true;
-                        }
-                    } else {
-                        if (c == ']') {
-                            const timestamp_number = try std.fmt.parseUnsigned(u32, remaining_file[start_index..i], 10);
-                            // std.debug.print("{}\n", .{timestamp_number});
-                            move_list.items[move_list.items.len - 1].delay = timestamp_number;
-                            start_read = false;
-                            is_white = !is_white;
-                            mode = .move_number;
                         }
                     }
                 },
             }
         }
+        // debug: view what recorded
         std.debug.print("{} plies! {} moves!\n", .{ move_list.items.len, move_list.items.len / 2 });
         for (move_list.items) |change| {
             std.debug.print("{c} from {s} to {s},", .{ @intFromEnum(change.mover), change.from.str(), change.to.str() });
@@ -553,6 +396,138 @@ const PgnReader = struct {
             .game_info = game,
             .move_list = move_list, //move_list,
         };
+    }
+    fn parseMove(game: *Game, players: *[2]Player, is_white: bool, move: []const u8) Change {
+        const player_i: usize = @intFromBool(is_white);
+        var castling = false;
+        // push to movelist
+        var hold_change: Change = .{};
+        // check which piece is moving
+        hold_change.mover = switch (move[0]) {
+            'K' => if (is_white) .K else .k,
+            'Q' => if (is_white) .Q else .q,
+            'R' => if (is_white) .R else .r,
+            'B' => if (is_white) .B else .b,
+            'N' => if (is_white) .N else .n,
+            'O' => lbo: {
+                // handle all castling logic since its fixed (except for check and checkmate)
+                castling = true;
+                const is_castle_long = move.len >= 5; //O-O >=3, O-O-O >=5
+                const back_rank: u3 = if (is_white) 0 else 7;
+                hold_change.from = players[player_i].king.square;
+                hold_change.to = .{ .file = if (is_castle_long) 6 else 2, .rank = back_rank };
+                // update player king
+                players[player_i].king.square = hold_change.to;
+                const rook_from_file: u3 = if (is_castle_long) 0 else 7;
+                const rook_to_file: u3 = if (is_castle_long) 3 else 5;
+                hold_change.castle = .{
+                    .from = .{ .file = rook_from_file, .rank = back_rank },
+                    .to = .{ .file = rook_to_file, .rank = back_rank },
+                };
+                // TODO update player rook (need to loop through all bc there COULD be more than 2 active rooks)
+                for (&players[player_i].rook) |*rook| {
+                    if (rook.alive and rook.square.file == rook_from_file and rook.square.rank == back_rank) {
+                        rook.square = hold_change.castle.?.to;
+                        break;
+                    }
+                }
+                break :lbo if (is_white) .K else .k;
+            },
+            else => if (is_white) .P else .p,
+        };
+        // read square and attack portion of the text
+        const sqr_sec_end = std.mem.indexOfNone(u8, move, "KQRNBabcdefgh12345678x");
+        const sqr_sec = if (sqr_sec_end) |end| move[0..end] else move[0..];
+        // have room to potentially read 1-2 squares
+        var is_attack = false;
+        var file_count: u2, var rank_count: u2 = .{ 0, 0 };
+        var sqr1, var sqr2 = .{ Square.default, Square.default };
+        // bxc5: b5, c5
+        for (sqr_sec) |ch| {
+            if (ch >= 'a' and ch <= 'h') {
+                if (file_count == 0) {
+                    sqr1.file = @truncate(ch - 'a');
+                    sqr2.file = sqr1.file;
+                } else {
+                    sqr2.file = @truncate(ch - 'a');
+                }
+                file_count += 1;
+            } else if (ch >= '1' and ch <= '8') {
+                if (rank_count == 0) {
+                    sqr1.rank = @truncate(ch - '1');
+                    sqr2.rank = sqr1.rank;
+                } else {
+                    sqr2.rank = @truncate(ch - '1');
+                }
+                rank_count += 1;
+            } else if (ch == 'x') {
+                is_attack = true;
+            }
+        }
+        // file_count, rank_count
+        // 1,1 (ex. Ke6)            from: <find>,                to: sqr1
+        // 2,1 or 1,2 (ex. bxc5)    from: sqr1.file | sqr1.rank, to: sqr1
+        // 2,2 (ex. Qa1xh8#)        from: sqr1,                  to: sqr2
+
+        // fill in `from`, `to`, `replace` based on the mover (for pawns, depends on attack)
+        if (!castling) {
+            switch (hold_change.mover) {
+                .K, .k => {
+                    hold_change.from = players[player_i].king.square;
+                    hold_change.to = sqr1;
+                    // update player's pieces
+                    players[player_i].king.square = sqr1;
+                    game.board[hold_change.from.boardIndex()] = .nada;
+                    game.board[sqr1.boardIndex()] = hold_change.mover;
+                },
+                .P, .p => {
+                    // pawn movement always 1,1
+                    for (&players[player_i].pawn) |*p| {
+                        if (p.alive and p.square.file == sqr1.file) {
+                            const sqr_o = p.square.boardIndex();
+                            if (!is_attack) {
+                                const sqr_check = if (is_white) sqr_o + 8 else sqr_o - 8;
+                                // ONLY thing that matters is if 1 space in front of pawn is empty, for both 1 hop and 2 hop pawns
+                                if (game.board[sqr_check] == .nada) {
+                                    hold_change.from = p.square;
+                                    hold_change.to = sqr1;
+                                    p.square = sqr1;
+                                    game.board[sqr_o] = .nada;
+                                    game.board[sqr1.boardIndex()] = hold_change.mover;
+                                    break;
+                                }
+                            } else {
+                                // file2 > file1 = +1 else -1
+                                // check 1 square diagonal towards the `to` square
+                                // hm integer overflow
+                                const file_dir = sqr2.file > sqr1.file;
+                                var sqr_i = if (is_white) sqr_o + 8 else sqr_o - 8;
+                                if (file_dir) {
+                                    sqr_i += 1;
+                                } else sqr_i -= 1;
+
+                                // also check for en passant
+                                const enpass_index = if (file_dir) sqr_o + 1 else sqr_o - 1;
+                                hold_change.enpassant = if (is_white) game.board[enpass_index] == .p else game.board[enpass_index] == .P;
+                                if (game.board[sqr_i] != .nada or hold_change.enpassant) {
+                                    hold_change.from = p.square;
+                                    hold_change.to = sqr2;
+                                    p.square = sqr2;
+                                    hold_change.replace = if (hold_change.enpassant) game.board[enpass_index] else game.board[sqr2.boardIndex()];
+                                    game.board[sqr_o] = .nada;
+                                    game.board[sqr2.boardIndex()] = hold_change.mover;
+                                    if (hold_change.enpassant)
+                                        game.board[enpass_index] = .nada;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                },
+                else => unreachable,
+            }
+        }
+        return hold_change;
     }
     fn drawPlayback(self: Self) void {
         _ = self;
@@ -587,11 +562,6 @@ const PgnReader = struct {
     fn drawNext(self: *Self) void {
         if (self.current_move >= self.move_list.items.len)
             return;
-        // reverse effects of previous updates
-        // if (self.current_move > 0) {
-        //     const prev = self.move_list.items[self.current_move - 1];
-        // }
-
         // move mover
         const curr = self.move_list.items[self.current_move];
         curr.printPiece(false);
