@@ -71,6 +71,10 @@ test "pawn as emoji and text" {
 
 const ChessUnicode = enum(u21) { K = 0x2654, Q, R, B, N, P, k, q, r, b, n, p };
 
+test "enum field" {
+    std.debug.print("\n{u}\n", .{@intFromEnum(@field(ChessUnicode, "K"))});
+}
+
 const Pieces = enum(u8) {
     nada = '.',
     K = 'K',
@@ -87,19 +91,9 @@ const Pieces = enum(u8) {
     p = 'p',
     fn str(self: Pieces) []const u8 {
         return switch (self) {
-            .K => std.fmt.comptimePrint("{u} ", .{@intFromEnum(ChessUnicode.K)}),
-            .Q => std.fmt.comptimePrint("{u} ", .{@intFromEnum(ChessUnicode.Q)}),
-            .R => std.fmt.comptimePrint("{u} ", .{@intFromEnum(ChessUnicode.R)}),
-            .B => std.fmt.comptimePrint("{u} ", .{@intFromEnum(ChessUnicode.B)}),
-            .N => std.fmt.comptimePrint("{u} ", .{@intFromEnum(ChessUnicode.N)}),
-            .P => std.fmt.comptimePrint("{u} ", .{@intFromEnum(ChessUnicode.P)}),
-            .k => std.fmt.comptimePrint("{u} ", .{@intFromEnum(ChessUnicode.k)}),
-            .q => std.fmt.comptimePrint("{u} ", .{@intFromEnum(ChessUnicode.q)}),
-            .r => std.fmt.comptimePrint("{u} ", .{@intFromEnum(ChessUnicode.r)}),
-            .b => std.fmt.comptimePrint("{u} ", .{@intFromEnum(ChessUnicode.b)}),
-            .n => std.fmt.comptimePrint("{u} ", .{@intFromEnum(ChessUnicode.n)}),
             .p => "♟︎ ", // has VS15 unicode block to make text and not emoji
             .nada => "  ",
+            inline else => |e| std.fmt.comptimePrint("{u} ", .{ @intFromEnum(@field(ChessUnicode,&[1]u8{ @intFromEnum(e) })) }),
         };
     }
 };
@@ -435,42 +429,43 @@ const PgnReader = struct {
             },
             else => if (is_white) .P else .p,
         };
-        // read square and attack portion of the text
-        const sqr_sec_end = std.mem.indexOfNone(u8, move, "KQRNBabcdefgh12345678x");
-        const sqr_sec = if (sqr_sec_end) |end| move[0..end] else move[0..];
-        // have room to potentially read 1-2 squares
-        var is_attack = false;
-        var file_count: u2, var rank_count: u2 = .{ 0, 0 };
-        var sqr1, var sqr2 = .{ Square.default, Square.default };
-        // bxc5: b5, c5
-        for (sqr_sec) |ch| {
-            if (ch >= 'a' and ch <= 'h') {
-                if (file_count == 0) {
-                    sqr1.file = @truncate(ch - 'a');
-                    sqr2.file = sqr1.file;
-                } else {
-                    sqr2.file = @truncate(ch - 'a');
-                }
-                file_count += 1;
-            } else if (ch >= '1' and ch <= '8') {
-                if (rank_count == 0) {
-                    sqr1.rank = @truncate(ch - '1');
-                    sqr2.rank = sqr1.rank;
-                } else {
-                    sqr2.rank = @truncate(ch - '1');
-                }
-                rank_count += 1;
-            } else if (ch == 'x') {
-                is_attack = true;
-            }
-        }
-        // file_count, rank_count
-        // 1,1 (ex. Ke6)            from: <find>,                to: sqr1
-        // 2,1 or 1,2 (ex. bxc5)    from: sqr1.file | sqr1.rank, to: sqr1
-        // 2,2 (ex. Qa1xh8#)        from: sqr1,                  to: sqr2
-
-        // fill in `from`, `to`, `replace` based on the mover (for pawns, depends on attack)
+        // skip to check/checkmate section
         if (!castling) {
+            // read square and attack portion of the text
+            const sqr_sec_end = std.mem.indexOfNone(u8, move, "KQRNBabcdefgh12345678x");
+            const sqr_sec = if (sqr_sec_end) |end| move[0..end] else move[0..];
+            // have room to potentially read 1-2 squares
+            var is_attack = false;
+            var file_count: u2, var rank_count: u2 = .{ 0, 0 };
+            var sqr1, var sqr2 = .{ Square.default, Square.default };
+            // bxc5: b5, c5
+            for (sqr_sec) |ch| {
+                if (ch >= 'a' and ch <= 'h') {
+                    if (file_count == 0) {
+                        sqr1.file = @truncate(ch - 'a');
+                        sqr2.file = sqr1.file;
+                    } else {
+                        sqr2.file = @truncate(ch - 'a');
+                    }
+                    file_count += 1;
+                } else if (ch >= '1' and ch <= '8') {
+                    if (rank_count == 0) {
+                        sqr1.rank = @truncate(ch - '1');
+                        sqr2.rank = sqr1.rank;
+                    } else {
+                        sqr2.rank = @truncate(ch - '1');
+                    }
+                    rank_count += 1;
+                } else if (ch == 'x') {
+                    is_attack = true;
+                }
+            }
+            // file_count, rank_count
+            // 1,1 (ex. Ke6)            from: <find>,                to: sqr1
+            // 2,1 or 1,2 (ex. bxc5)    from: sqr1.file | sqr1.rank, to: sqr1
+            // 2,2 (ex. Qa1xh8#)        from: sqr1,                  to: sqr2
+
+            // fill in `from`, `to`, `replace` based on the mover (for pawns, depends on attack)
             switch (hold_change.mover) {
                 .K, .k => {
                     hold_change.from = players[player_i].king.square;
