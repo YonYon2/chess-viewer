@@ -93,7 +93,9 @@ const Pieces = enum(u8) {
         return switch (self) {
             .p => "♟︎ ", // has VS15 unicode block to make text and not emoji
             .nada => "  ",
-            inline else => |e| std.fmt.comptimePrint("{u} ", .{ @intFromEnum(@field(ChessUnicode,&[1]u8{ @intFromEnum(e) })) }),
+            inline else => |e| std.fmt.comptimePrint("{u} ", .{ 
+                @intFromEnum(@field(ChessUnicode,&[1]u8{ @intFromEnum(e) }))
+            }),
         };
     }
 };
