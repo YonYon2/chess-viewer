@@ -93,9 +93,11 @@ const Pieces = enum(u8) {
         return switch (self) {
             .p => "♟︎ ", // has VS15 unicode block to make text and not emoji
             .nada => "  ",
+            // zig fmt: off
             inline else => |e| std.fmt.comptimePrint("{u} ", .{ 
                 @intFromEnum(@field(ChessUnicode,&[1]u8{ @intFromEnum(e) }))
             }),
+            // zig fmt: on
         };
     }
 };
@@ -464,7 +466,7 @@ const PgnReader = struct {
             }
             // file_count, rank_count
             // 1,1 (ex. Ke6)            from: <find>,                to: sqr1
-            // 2,1 or 1,2 (ex. bxc5)    from: sqr1.file | sqr1.rank, to: sqr1
+            // 2,1 or 1,2 (ex. bxc5)    from: sqr1.file | sqr1.rank, to: sqr2
             // 2,2 (ex. Qa1xh8#)        from: sqr1,                  to: sqr2
 
             // fill in `from`, `to`, `replace` based on the mover (for pawns, depends on attack)
@@ -517,6 +519,22 @@ const PgnReader = struct {
                                         game.board[enpass_index] = .nada;
                                     break;
                                 }
+                            }
+                        }
+                    }
+                },
+                .q, .Q => {
+                    for (&players[player_i].queen) |*queen| {
+                        if (queen.alive) {
+                            // if we have the from square, check if it matches
+                            if (file_count == rank_count) {
+                                if (file_count == 2 and queen.square.file == sqr1.file and queen.square.rank == sqr1.rank) {
+                                    // EZ
+                                } else {
+                                    // calculate paths that intersect
+                                }
+                            } else if (if (file_count == 2) queen.square.file == sqr1.file else queen.square.rank == sqr1.rank) {
+                                // find by the saved disambiguated position
                             }
                         }
                     }
