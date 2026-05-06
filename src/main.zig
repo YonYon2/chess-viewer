@@ -49,7 +49,7 @@ fn Color(RGB: [3]u8) type {
         }
     };
 }
-
+// not really needed anymore, but cool learning of format function
 test "color format showcase" {
     // const col: Color(bg1) = .{};
     std.debug.print("\n" ++ BG_FMT ++ "!\n", .{Color(bg1).c});
@@ -230,16 +230,12 @@ const Change = struct {
             const col: u32 = if (reverse) self.to.file else self.from.file;
             std.debug.print(BG_FMT2 ++ FG_FMT2 ++ GOTO_FMT ++ "{s}", .{ sqr_c, piece_c, row + 2, 2 * col + 1, p_replace.str() });
         }
-        // TODO implement reverse form as well
-        if (!reverse) {
-
         if (self.castle) |rook| {
-            const rook_dir = if (reverse) (rook.from.rank -% rook.from.file) % 2 == 0 else 1;
-            const rook_sqr_c = if ((rook.from.rank -% rook.from.file) % 2 == 0) colorFmt(bg1) else colorFmt(bg2);
-            const rook_row: u32 = rook.from.rank;
-            const rook_col: u32 = rook.from.file;
+            const rook_dir = if (reverse) (rook.to.rank -% rook.to.file) % 2 == 0 else (rook.from.rank -% rook.from.file) % 2 == 0;
+            const rook_sqr_c = if (rook_dir) colorFmt(bg1) else colorFmt(bg2);
+            const rook_row: u32 = if (reverse) rook.to.rank else rook.from.rank;
+            const rook_col: u32 = if (reverse) rook.to.file else rook.from.file;
             std.debug.print(BG_FMT2 ++ GOTO_FMT ++ "  ", .{ rook_sqr_c, rook_row + 2, 2 * rook_col + 1 });
-        }
         }
         if (self.enpassant) {
             // take the file of `to` and the rank of `from`
@@ -258,14 +254,14 @@ const Change = struct {
         const row: u32 = if (reverse) self.from.rank else self.to.rank;
         const col: u32 = if (reverse) self.from.file else self.to.file;
         const p_rev = self.mover;
-        std.debug.print(BG_FMT2 ++ FG_FMT2 ++ GOTO_FMT ++ "{s}", .{ sqr_c, piece_c, row + 2, 2*col + 1, p_rev.str() });
+        std.debug.print(BG_FMT2 ++ FG_FMT2 ++ GOTO_FMT ++ "{s}", .{ sqr_c, piece_c, row + 2, 2 * col + 1, p_rev.str() });
         if (self.castle) |rook| {
             const from_or_to = if (reverse) (rook.from.rank -% rook.from.file) % 2 == 0 else (rook.to.rank -% rook.to.file) % 2 == 0;
             const rook_sqr_c = if (from_or_to) colorFmt(bg1) else colorFmt(bg2);
             const rook_row: u32 = if (reverse) rook.from.rank else rook.to.rank;
             const rook_col: u32 = if (reverse) rook.from.file else rook.to.file;
             const rook_e: Pieces = if (self.side) .R else .r;
-            std.debug.print(BG_FMT2 ++ FG_FMT2 ++ GOTO_FMT ++ "{s}", .{ rook_sqr_c, piece_c, rook_row + 2, 2*rook_col + 1, rook_e.str() });
+            std.debug.print(BG_FMT2 ++ FG_FMT2 ++ GOTO_FMT ++ "{s}", .{ rook_sqr_c, piece_c, rook_row + 2, 2 * rook_col + 1, rook_e.str() });
         }
     }
 };
@@ -359,7 +355,7 @@ const PgnReader = struct {
                         start_read = true;
                     } else {
                         if (std.ascii.isWhitespace(c)) {
-                            // TODO handle any check, checkmate, or promotion here
+                            // handle any check, checkmate, or promotion here
                             const res_change = parseMove(&game, &players, is_white, remaining_file[start_index..i]);
                             // add move
                             try move_list.append(allocator, res_change);
@@ -621,8 +617,9 @@ const RGBWheel = struct {
     climb: bool = false,
     phase: usize = 0,
     fn scroll(self: *Self) void {
-        if (!self.climb) {
-            const next_c = (self.phase + 1) % 3;
+        // phase for [0,6)
+        if (self.phase % 2 == 0) {
+            const next_c = (self.phase / 2 + 1) % 3;
             self.rgb[next_c] += 1;
             if (self.rgb[next_c] == 255) {
                 self.climb = true;
@@ -642,10 +639,10 @@ pub fn main() !void {
     var gpa = std.heap.DebugAllocator(.{}).init;
     const allocator = gpa.allocator();
     // dont need to do if it already handles all allocs?
-    // defer {
-    //     std.debug.print("gpa deinit\n", .{});
-    //     _ = gpa.deinit();
-    // }
+    defer {
+        std.debug.print("gpa deinit\n", .{});
+        _ = gpa.deinit();
+    }
 
     // going to use this to provide a chess PGN file to replay
     var args = try std.process.argsWithAllocator(allocator);
@@ -709,23 +706,6 @@ pub fn main() !void {
     my_pgn.drawInit();
     defer std.debug.print(RESET_COL ++ "\n", .{});
 
-    // var times_up: u32 = 1200;
-    // var clock_buf = [1]u8{0} ** 6;
-    // var delay = std.time.milliTimestamp();
-
-    // while (true) {
-    //     const new_delay = std.time.milliTimestamp();
-    //     if (new_delay - delay >= 100) {
-    //         times_up -= 1;
-    //         std.debug.print("\r{s}", .{clockStr(&clock_buf, times_up)});
-    //         delay = new_delay;
-    //     }
-    //     if (times_up == 0)
-    //         break;
-    // }
-
-    // probably not needed
-
     // terminal keyboard input
     // TODO need to turn off line mode so the byte it taken instantly
     var input_b: [1]u8 = undefined; //"q".*;
@@ -733,12 +713,12 @@ pub fn main() !void {
     const stdin = &stdin_reader.interface;
 
     // only accept 'L' for previous, 'R' or ' ' for next
-    while (input_b[0] != 'q') {
+    while (std.ascii.toLower(input_b[0]) != 'q') {
         // std.debug.print("{}\r", .{try stdin.takeByte()});
         const char = try stdin.takeByte();
-        if (char == 'R' or char == ' ') {
+        if (std.ascii.toLower(char) == 'r' or char == ' ') {
             my_pgn.drawNext();
-        } else if (char == 'L') {
+        } else if (std.ascii.toLower(char) == 'l') {
             my_pgn.drawPrev();
         }
     }
@@ -814,12 +794,12 @@ fn test_find_squares(move_text: []const u8) void {
             is_attack = true;
         }
     }
-    std.debug.print("{s} to {s}\n", .{ sqr1.str(), sqr2.str() });
+    std.debug.print("{s} to {s} ({} {})\n", .{ sqr1.str(), sqr2.str(), file_count, rank_count });
 }
 
 test "detect disambiguating moves" {
     std.debug.print("\n", .{});
-    const moves = [_][]const u8{ "Kb6", "Bgxh7", "Qb2f6" };
+    const moves = [_][]const u8{ "Kb6", "Bgxh7", "axh7", "N2xh7", "Qb2xf6" };
     for (moves) |m| {
         test_find_squares(m);
     }
