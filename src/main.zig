@@ -207,6 +207,7 @@ fn clockStr(buf: *[6]u8, time: u32) []const u8 {
 // for the purposes of updating the screen
 const Change = struct {
     const Self = @This();
+    side: bool = false,
     flip: bool = false,
     from: Square = .default,
     to: Square = .default,
@@ -220,23 +221,30 @@ const Change = struct {
     delay: u32 = 1, // tenths of a second
     /// blanks the from square with the correct background color and at the correct cursor position, accounting for flip
     fn printBlank(self: Self, reverse: bool) void {
-        if (reverse) {
-            const p_enpass = if (self.enpassant) Pieces.nada else self.replace;
-            const piece_c = if (std.ascii.isUpper(@intFromEnum(self.replace))) colorFmt(white) else colorFmt(black);
-            const sqr_c = if ((self.to.rank -% self.to.file) % 2 == 0) colorFmt(bg1) else colorFmt(bg2);
-            const row: u32 = self.to.rank;
-            const col: u32 = self.to.file;
-            std.debug.print(LOAD_POS ++ "<{c}>", .{@intFromEnum(self.replace)});
-            std.debug.print(BG_FMT2 ++ FG_FMT2 ++ GOTO_FMT ++ "{s}", .{ sqr_c, piece_c, row + 2, 2 * col + 1, p_enpass.str() });
-        } else {
-            const sqr_c = if ((self.from.rank -% self.from.file) % 2 == 0) colorFmt(bg1) else colorFmt(bg2);
-            const row: u32, const col: u32 = .{ self.from.rank, self.from.file };
-            std.debug.print(BG_FMT2 ++ GOTO_FMT ++ "  ", .{ sqr_c, row + 2, 2 * col + 1 });
+        {
+            const from_or_to = if (reverse) (self.to.rank -% self.to.file) % 2 == 0 else (self.from.rank -% self.from.file) % 2 == 0;
+            const p_replace = if (self.enpassant or !reverse) Pieces.nada else self.replace;
+            const piece_c = if (!self.side) colorFmt(white) else colorFmt(black);
+            const sqr_c = if (from_or_to) colorFmt(bg1) else colorFmt(bg2);
+            const row: u32 = if (reverse) self.to.rank else self.from.rank;
+            const col: u32 = if (reverse) self.to.file else self.from.file;
+            std.debug.print(BG_FMT2 ++ FG_FMT2 ++ GOTO_FMT ++ "{s}", .{ sqr_c, piece_c, row + 2, 2 * col + 1, p_replace.str() });
+        }
+        // TODO implement reverse form as well
+        if (!reverse) {
+
+        if (self.castle) |rook| {
+            const rook_dir = if (reverse) (rook.from.rank -% rook.from.file) % 2 == 0 else 1;
+            const rook_sqr_c = if ((rook.from.rank -% rook.from.file) % 2 == 0) colorFmt(bg1) else colorFmt(bg2);
+            const rook_row: u32 = rook.from.rank;
+            const rook_col: u32 = rook.from.file;
+            std.debug.print(BG_FMT2 ++ GOTO_FMT ++ "  ", .{ rook_sqr_c, rook_row + 2, 2 * rook_col + 1 });
+        }
         }
         if (self.enpassant) {
             // take the file of `to` and the rank of `from`
             const enpass_c = if ((self.from.rank -% self.to.file) % 2 == 0) colorFmt(bg1) else colorFmt(bg2);
-            const piece_c = if (std.ascii.isUpper(@intFromEnum(self.replace))) colorFmt(white) else colorFmt(black);
+            const piece_c = if (!self.side) colorFmt(white) else colorFmt(black);
             const row: u32, const col: u32 = .{ self.from.rank, self.to.file };
             const p_rev = if (reverse) self.replace else Pieces.nada;
             std.debug.print(BG_FMT2 ++ FG_FMT2 ++ GOTO_FMT ++ "{s}", .{ enpass_c, piece_c, row + 2, 2 * col + 1, p_rev.str() });
@@ -244,13 +252,21 @@ const Change = struct {
     }
     /// establish the piece with its background color, foreground color, and cursor position from its square and flip's value
     fn printPiece(self: Self, reverse: bool) void {
-        const piece_c = if (std.ascii.isUpper(@intFromEnum(self.mover))) colorFmt(white) else colorFmt(black);
+        const piece_c = if (self.side) colorFmt(white) else colorFmt(black);
         const condition = if (reverse) (self.from.rank -% self.from.file) % 2 == 0 else (self.to.rank -% self.to.file) % 2 == 0;
         const sqr_c = if (condition) colorFmt(bg1) else colorFmt(bg2);
         const row: u32 = if (reverse) self.from.rank else self.to.rank;
         const col: u32 = if (reverse) self.from.file else self.to.file;
         const p_rev = self.mover;
-        std.debug.print(BG_FMT2 ++ FG_FMT2 ++ GOTO_FMT ++ "{s}", .{ sqr_c, piece_c, row + 2, 2 * col + 1, p_rev.str() });
+        std.debug.print(BG_FMT2 ++ FG_FMT2 ++ GOTO_FMT ++ "{s}", .{ sqr_c, piece_c, row + 2, 2*col + 1, p_rev.str() });
+        if (self.castle) |rook| {
+            const from_or_to = if (reverse) (rook.from.rank -% rook.from.file) % 2 == 0 else (rook.to.rank -% rook.to.file) % 2 == 0;
+            const rook_sqr_c = if (from_or_to) colorFmt(bg1) else colorFmt(bg2);
+            const rook_row: u32 = if (reverse) rook.from.rank else rook.to.rank;
+            const rook_col: u32 = if (reverse) rook.from.file else rook.to.file;
+            const rook_e: Pieces = if (self.side) .R else .r;
+            std.debug.print(BG_FMT2 ++ FG_FMT2 ++ GOTO_FMT ++ "{s}", .{ rook_sqr_c, piece_c, rook_row + 2, 2*rook_col + 1, rook_e.str() });
+        }
     }
 };
 
@@ -399,7 +415,7 @@ const PgnReader = struct {
         const player_i: usize = @intFromBool(is_white);
         var castling = false;
         // push to movelist
-        var hold_change: Change = .{};
+        var hold_change: Change = .{ .side = is_white };
         // check which piece is moving
         hold_change.mover = switch (move[0]) {
             'K' => if (is_white) .K else .k,
@@ -413,7 +429,7 @@ const PgnReader = struct {
                 const is_castle_long = move.len >= 5; //O-O >=3, O-O-O >=5
                 const back_rank: u3 = if (is_white) 0 else 7;
                 hold_change.from = players[player_i].king.square;
-                hold_change.to = .{ .file = if (is_castle_long) 6 else 2, .rank = back_rank };
+                hold_change.to = .{ .file = if (is_castle_long) 2 else 6, .rank = back_rank };
                 // update player king
                 players[player_i].king.square = hold_change.to;
                 const rook_from_file: u3 = if (is_castle_long) 0 else 7;
@@ -422,7 +438,7 @@ const PgnReader = struct {
                     .from = .{ .file = rook_from_file, .rank = back_rank },
                     .to = .{ .file = rook_to_file, .rank = back_rank },
                 };
-                // TODO update player rook (need to loop through all bc there COULD be more than 2 active rooks)
+                // loop to find which player rook to update (there COULD be more than 2 active rooks)
                 for (&players[player_i].rook) |*rook| {
                     if (rook.alive and rook.square.file == rook_from_file and rook.square.rank == back_rank) {
                         rook.square = hold_change.castle.?.to;
