@@ -137,6 +137,7 @@ const Piece = struct {
 
 const Player = struct {
     // used for position reference to quickly figure out what is being replaced
+    // starting to get annoying
     pawn: [8]Piece,
     knight: [10]Piece,
     bishop: [10]Piece,
@@ -359,7 +360,7 @@ const PgnReader = struct {
                             const res_change = parseMove(&game, &players, is_white, remaining_file[start_index..i]);
                             // add move
                             try move_list.append(allocator, res_change);
-                            // std.debug.print("{any} ", .{hold_change});
+                            std.debug.print("{c}, ", .{@intFromEnum(res_change.mover)});
                             // game.printBoard();
                             // std.debug.print("{s} ", .{move_text});
                             start_read = false;
@@ -481,11 +482,14 @@ const PgnReader = struct {
             // 2,1 or 1,2 (ex. bxc5)    from: sqr1.file | sqr1.rank, to: sqr2
             // 2,2 (ex. Qa1xh8#)        from: sqr1,                  to: sqr2
 
-            // fill in `from`, `to`, `replace` based on the mover (for pawns, depends on attack)
+            // fill in `from`, `to`, and `replace` based on the mover (for pawns, depends on attack)
+
             switch (hold_change.mover) {
                 .K, .k => {
                     hold_change.from = players[player_i].king.square;
                     hold_change.to = sqr1;
+                    if (is_attack)
+                        hold_change.replace = game.board[hold_change.to.boardIndex()];
                     // update player's pieces
                     players[player_i].king.square = sqr1;
                     game.board[hold_change.from.boardIndex()] = .nada;
@@ -536,14 +540,82 @@ const PgnReader = struct {
                     }
                 },
                 .q, .Q => {
+                    // this helps for regular move, so we don't waste time searching all queens when only one is alive at a time
+                    // for now, do the long way anyways
+                    // var queens_alive: usize = 0;
                     for (&players[player_i].queen) |*queen| {
                         if (queen.alive) {
+                            // queens_alive += 1;
                             // if we have the from square, check if it matches
                             if (file_count == rank_count) {
+                                // doubly disambiguated
                                 if (file_count == 2 and queen.square.file == sqr1.file and queen.square.rank == sqr1.rank) {
-                                    // EZ
+                                    game.board[queen.square.boardIndex()] = .nada;
+                                    hold_change.from = queen.square;
+                                    hold_change.to = sqr2;
+                                    queen.square = sqr2;
+                                    game.board[sqr2.boardIndex()] = hold_change.mover;
                                 } else {
-                                    // calculate paths that intersect
+                                    // dont know, find which by calculating if its paths intersect with the next square
+                                    const queen_in_path = checkPath(sqr1, queen.square);
+                                    if (queen_in_path != .none) {
+                                        const move_positive = switch (queen_in_path) {
+                                            .major, .minor, .horizontal => sqr1.file > queen.square.file,
+                                            .vertical => sqr1.rank > queen.square.rank,
+                                            else => unreachable,
+                                        };
+                                        var path_open = true;
+                                        var sqr_idx = queen.square;
+                                        while (true) {
+                                            // increment to next tile in path
+                                            std.debug.print("=>({}, {}) ", .{ sqr_idx.file, sqr_idx.rank });
+                                            switch (queen_in_path) {
+                                                .horizontal => {
+                                                    if (move_positive) sqr_idx.file += 1 else sqr_idx.file -= 1;
+                                                },
+                                                .vertical => {
+                                                    if (move_positive) sqr_idx.rank += 1 else sqr_idx.rank -= 1;
+                                                },
+                                                .major => {
+                                                    if (move_positive) {
+                                                        sqr_idx.rank += 1;
+                                                        sqr_idx.file += 1;
+                                                    } else {
+                                                        sqr_idx.rank -= 1;
+                                                        sqr_idx.file -= 1;
+                                                    }
+                                                },
+                                                .minor => {
+                                                    if (move_positive) {
+                                                        sqr_idx.rank -= 1;
+                                                        sqr_idx.file += 1;
+                                                    } else {
+                                                        sqr_idx.rank += 1;
+                                                        sqr_idx.file -= 1;
+                                                    }
+                                                },
+                                                else => unreachable,
+                                            }
+                                            if (sqr_idx.rank == sqr1.rank and sqr_idx.file == sqr1.file)
+                                                break;
+                                            if (game.board[sqr_idx.boardIndex()] != .nada) {
+                                                path_open = false;
+                                                break;
+                                            }
+                                        }
+                                        if (path_open) {
+                                            // finish and leave
+                                            game.board[queen.square.boardIndex()] = .nada;
+                                            hold_change.from = queen.square;
+                                            hold_change.to = sqr1;
+                                            if (is_attack) {
+                                                hold_change.replace = game.board[sqr1.boardIndex()];
+                                            }
+                                            queen.square = sqr1;
+                                            game.board[sqr1.boardIndex()] = hold_change.mover;
+                                            break;
+                                        }
+                                    }
                                 }
                             } else if (if (file_count == 2) queen.square.file == sqr1.file else queen.square.rank == sqr1.rank) {
                                 // find by the saved disambiguated position
@@ -551,7 +623,7 @@ const PgnReader = struct {
                         }
                     }
                 },
-                else => unreachable,
+                else => {},
             }
         }
         return hold_change;
@@ -604,6 +676,19 @@ const PgnReader = struct {
         curr.printPiece(true);
         curr.printBlank(true);
         std.debug.print(LOAD_POS, .{});
+    }
+    const PathType = enum { none, horizontal, vertical, major, minor };
+    fn checkPath(a: Square, b: Square) PathType {
+        if (a.rank == b.rank) {
+            return .horizontal;
+        } else if (a.file == b.file) {
+            return .vertical;
+        } else if (a.rank -% a.file == b.rank -% b.file) {
+            return .major;
+        } else if (a.rank +% a.file == b.rank +% b.file) {
+            return .minor;
+        }
+        return .none;
     }
     fn deinit(self: *Self) void {
         self.move_list.deinit(self.allocator);
