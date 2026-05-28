@@ -120,6 +120,16 @@ const Square = struct {
     fn boardIndex(self: Self) usize {
         return @as(usize, self.rank) * 8 + self.file;
     }
+    // move one square diagonally on the major/minor axis in the positive/negative direction
+    fn diaStep(self: *Self, major: bool, positive: bool) void {
+        if (major) {
+            self.file = if (positive) self.file + 1 else self.file - 1;
+            self.rank = if (positive) self.rank + 1 else self.rank - 1;
+        } else {
+            self.file = if (positive) self.file + 1 else self.file - 1;
+            self.rank = if (positive) self.rank - 1 else self.rank + 1;
+        }
+    }
 };
 
 const Piece = struct {
@@ -265,6 +275,15 @@ const Change = struct {
             std.debug.print(BG_FMT2 ++ FG_FMT2 ++ GOTO_FMT ++ "{s}", .{ rook_sqr_c, piece_c, rook_row + 2, 2 * rook_col + 1, rook_e.str() });
         }
     }
+    fn save(self: *Self, game: *Game, piece: *Piece, landing: Square, attacking: bool) void {
+        self.from = piece.square;
+        self.to = landing;
+        if (attacking)
+            self.replace = game.board[self.to.boardIndex()];
+        piece.square = landing;
+        game.board[self.from.boardIndex()] = .nada;
+        game.board[landing.boardIndex()] = self.mover;
+    }
 };
 
 // order of iterating through changes:
@@ -376,8 +395,8 @@ const PgnReader = struct {
                         }
                     } else {
                         if (c == ']') {
-                            const time_text = remaining_file[start_index..i];
                             if (mode == .timestamp) {
+                                const time_text = remaining_file[start_index..i];
                                 move_list.items[move_list.items.len - 1].delay = try std.fmt.parseUnsigned(u32, time_text, 10);
                                 is_white = !is_white;
                                 mode = .move_number;
@@ -446,7 +465,10 @@ const PgnReader = struct {
             },
             else => if (is_white) .P else .p,
         };
-        // skip to check/checkmate section
+        // check/checkmate
+        if (move[move.len - 1] == '+') {
+            hold_change.check = true;
+        }
         if (!castling) {
             // read square and attack portion of the text
             const sqr_sec_end = std.mem.indexOfNone(u8, move, "KQRNBabcdefgh12345678x");
@@ -486,14 +508,30 @@ const PgnReader = struct {
 
             switch (hold_change.mover) {
                 .K, .k => {
-                    hold_change.from = players[player_i].king.square;
-                    hold_change.to = sqr1;
-                    if (is_attack)
-                        hold_change.replace = game.board[hold_change.to.boardIndex()];
-                    // update player's pieces
-                    players[player_i].king.square = sqr1;
-                    game.board[hold_change.from.boardIndex()] = .nada;
-                    game.board[sqr1.boardIndex()] = hold_change.mover;
+                    hold_change.save(game, &players[player_i].king, sqr1, is_attack);
+                },
+                .n, .N => {
+                    for (&players[player_i].knight) |*knight| {
+                        if (knight.alive) {
+                            if (file_count == rank_count) {
+                                // doubly disambiguated
+                                if (file_count == 2 and knight.square.file == sqr1.file and knight.square.rank == sqr1.rank) {
+                                    hold_change.save(game, knight, sqr2, is_attack);
+                                } else { // regular
+                                    const offs = [_]u3{ 2, 1, 1, 2 };
+                                    // check the eight (or less) squares a knight can jump to
+                                    for (0..8) |i| {
+                                        const n_file, const n_file_o = if (i < 2 or i > 5) @addWithOverflow(knight.square.file, offs[i % 4]) else @subWithOverflow(knight.square.file, offs[i % 4]);
+                                        const n_rank, const n_rank_o = if (i < 4) @addWithOverflow(knight.square.file, offs[i % 4]) else @subWithOverflow(knight.square.file, offs[i % 4]);
+                                        if (n_file_o == 0 and n_rank_o == 0 and n_file == sqr1.file and n_rank == sqr1.rank) {
+                                            hold_change.save(game, knight, sqr1, is_attack);
+                                        }
+                                        // const n_rank = if (i < 4) knight.square.rank + offs[(i + 2) % 4] else knight.square.rank - offs[(i + 2) % 4];
+                                    }
+                                }
+                            }
+                        }
+                    }
                 },
                 .P, .p => {
                     // pawn movement always 1,1
@@ -504,23 +542,17 @@ const PgnReader = struct {
                                 const sqr_check = if (is_white) sqr_o + 8 else sqr_o - 8;
                                 // ONLY thing that matters is if 1 space in front of pawn is empty, for both 1 hop and 2 hop pawns
                                 if (game.board[sqr_check] == .nada) {
-                                    hold_change.from = p.square;
-                                    hold_change.to = sqr1;
-                                    p.square = sqr1;
-                                    game.board[sqr_o] = .nada;
-                                    game.board[sqr1.boardIndex()] = hold_change.mover;
+                                    hold_change.save(game, p, sqr1, false);
                                     break;
                                 }
                             } else {
-                                // file2 > file1 = +1 else -1
                                 // check 1 square diagonal towards the `to` square
-                                // hm integer overflow
+                                // hm integer overflow SHOULDNT happen
                                 const file_dir = sqr2.file > sqr1.file;
                                 var sqr_i = if (is_white) sqr_o + 8 else sqr_o - 8;
                                 if (file_dir) {
                                     sqr_i += 1;
                                 } else sqr_i -= 1;
-
                                 // also check for en passant
                                 const enpass_index = if (file_dir) sqr_o + 1 else sqr_o - 1;
                                 hold_change.enpassant = if (is_white) game.board[enpass_index] == .p else game.board[enpass_index] == .P;
@@ -550,11 +582,7 @@ const PgnReader = struct {
                             if (file_count == rank_count) {
                                 // doubly disambiguated
                                 if (file_count == 2 and queen.square.file == sqr1.file and queen.square.rank == sqr1.rank) {
-                                    game.board[queen.square.boardIndex()] = .nada;
-                                    hold_change.from = queen.square;
-                                    hold_change.to = sqr2;
-                                    queen.square = sqr2;
-                                    game.board[sqr2.boardIndex()] = hold_change.mover;
+                                    hold_change.save(game, queen, sqr2, is_attack);
                                 } else {
                                     // dont know, find which by calculating if its paths intersect with the next square
                                     const queen_in_path = checkPath(sqr1, queen.square);
@@ -577,22 +605,10 @@ const PgnReader = struct {
                                                     if (move_positive) sqr_idx.rank += 1 else sqr_idx.rank -= 1;
                                                 },
                                                 .major => {
-                                                    if (move_positive) {
-                                                        sqr_idx.rank += 1;
-                                                        sqr_idx.file += 1;
-                                                    } else {
-                                                        sqr_idx.rank -= 1;
-                                                        sqr_idx.file -= 1;
-                                                    }
+                                                    sqr_idx.diaStep(true, move_positive);
                                                 },
                                                 .minor => {
-                                                    if (move_positive) {
-                                                        sqr_idx.rank -= 1;
-                                                        sqr_idx.file += 1;
-                                                    } else {
-                                                        sqr_idx.rank += 1;
-                                                        sqr_idx.file -= 1;
-                                                    }
+                                                    sqr_idx.diaStep(false, move_positive);
                                                 },
                                                 else => unreachable,
                                             }
@@ -605,14 +621,7 @@ const PgnReader = struct {
                                         }
                                         if (path_open) {
                                             // finish and leave
-                                            game.board[queen.square.boardIndex()] = .nada;
-                                            hold_change.from = queen.square;
-                                            hold_change.to = sqr1;
-                                            if (is_attack) {
-                                                hold_change.replace = game.board[sqr1.boardIndex()];
-                                            }
-                                            queen.square = sqr1;
-                                            game.board[sqr1.boardIndex()] = hold_change.mover;
+                                            hold_change.save(game, queen, sqr1, is_attack);
                                             break;
                                         }
                                     }
@@ -621,6 +630,11 @@ const PgnReader = struct {
                                 // find by the saved disambiguated position
                             }
                         }
+                    }
+                },
+                .r, .R => {
+                    for (&players[player_i].rook) |*rook| {
+                        if (rook.alive) {}
                     }
                 },
                 else => {},
@@ -658,15 +672,16 @@ const PgnReader = struct {
             // std.debug.print(cursorGoto(1, 11) ++ self.game_info.white, .{});
         }
     }
-    fn drawNext(self: *Self) void {
+    fn drawNext(self: *Self) bool {
         if (self.current_move >= self.move_list.items.len)
-            return;
+            return false;
         // move mover
         const curr = self.move_list.items[self.current_move];
         curr.printPiece(false);
         curr.printBlank(false);
         std.debug.print(LOAD_POS, .{});
         self.current_move += 1;
+        return !(self.current_move >= self.move_list.items.len);
     }
     fn drawPrev(self: *Self) void {
         if (self.current_move > 0) {
@@ -755,7 +770,6 @@ pub fn main() !void {
         std.debug.print(help_msg, .{});
         return;
     }
-    //
     while (args.next()) |arg| {
         if (arg[0] == '-') {
             for (arg[1..arg.len]) |ch| {
@@ -797,14 +811,30 @@ pub fn main() !void {
     var stdin_reader = std.fs.File.stdin().reader(&input_b);
     const stdin = &stdin_reader.interface;
 
-    // only accept 'L' for previous, 'R' or ' ' for next
-    while (std.ascii.toLower(input_b[0]) != 'q') {
-        // std.debug.print("{}\r", .{try stdin.takeByte()});
-        const char = try stdin.takeByte();
-        if (std.ascii.toLower(char) == 'r' or char == ' ') {
-            my_pgn.drawNext();
-        } else if (std.ascii.toLower(char) == 'l') {
-            my_pgn.drawPrev();
+    if (!frame_play) {
+        var start = std.time.milliTimestamp();
+        while (true) {
+            const delay = std.time.milliTimestamp();
+            if ((delay - start) >= 100 * @as(i64, my_pgn.move_list.items[my_pgn.current_move].delay)) {
+                start = delay;
+                if (!my_pgn.drawNext())
+                    break;
+            }
+            // playing animation
+            // update progress bar?
+            // update clocks for shor
+
+        }
+    } else {
+        // only accept 'L' for previous, 'R' or ' ' for next
+        while (std.ascii.toLower(input_b[0]) != 'q') {
+            // std.debug.print("{}\r", .{try stdin.takeByte()});
+            const char = try stdin.takeByte();
+            if (std.ascii.toLower(char) == 'r' or char == ' ') {
+                _ = my_pgn.drawNext();
+            } else if (std.ascii.toLower(char) == 'l') {
+                my_pgn.drawPrev();
+            }
         }
     }
     std.debug.print("\n", .{});
