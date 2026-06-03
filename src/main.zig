@@ -295,7 +295,14 @@ const Change = struct {
 // 5. update check bg highlight
 // 6. advance to next change
 
-// piece that moves always leaves behind a blank tile
+// wanted to shorten writing `@addWithOverflow`
+fn ADC(a: u3, b: u3) @TypeOf(@addWithOverflow(a, b)) {
+    return @addWithOverflow(a, b);
+}
+
+fn SBC(a: u3, b: u3) @TypeOf(@subWithOverflow(a, b)) {
+    return @subWithOverflow(a, b);
+}
 
 // object that holds the info for what was read from a PGN file
 const PgnReader = struct {
@@ -499,36 +506,44 @@ const PgnReader = struct {
                     is_attack = true;
                 }
             }
+            std.debug.print("1[{s}] 2[{s}] ", .{ sqr1.str(), sqr2.str() });
             // file_count, rank_count
             // 1,1 (ex. Ke6)            from: <find>,                to: sqr1
             // 2,1 or 1,2 (ex. bxc5)    from: sqr1.file | sqr1.rank, to: sqr2
             // 2,2 (ex. Qa1xh8#)        from: sqr1,                  to: sqr2
 
             // fill in `from`, `to`, and `replace` based on the mover (for pawns, depends on attack)
-
             switch (hold_change.mover) {
                 .K, .k => {
                     hold_change.save(game, &players[player_i].king, sqr1, is_attack);
                 },
                 .n, .N => {
-                    for (&players[player_i].knight) |*knight| {
+                    nlook: for (&players[player_i].knight) |*knight| {
                         if (knight.alive) {
                             if (file_count == rank_count) {
                                 // doubly disambiguated
                                 if (file_count == 2 and knight.square.file == sqr1.file and knight.square.rank == sqr1.rank) {
                                     hold_change.save(game, knight, sqr2, is_attack);
-                                } else { // regular
-                                    const offs = [_]u3{ 2, 1, 1, 2 };
-                                    // check the eight (or less) squares a knight can jump to
-                                    for (0..8) |i| {
-                                        const n_file, const n_file_o = if (i < 2 or i > 5) @addWithOverflow(knight.square.file, offs[i % 4]) else @subWithOverflow(knight.square.file, offs[i % 4]);
-                                        const n_rank, const n_rank_o = if (i < 4) @addWithOverflow(knight.square.file, offs[i % 4]) else @subWithOverflow(knight.square.file, offs[i % 4]);
-                                        if (n_file_o == 0 and n_rank_o == 0 and n_file == sqr1.file and n_rank == sqr1.rank) {
-                                            hold_change.save(game, knight, sqr1, is_attack);
-                                        }
-                                        // const n_rank = if (i < 4) knight.square.rank + offs[(i + 2) % 4] else knight.square.rank - offs[(i + 2) % 4];
-                                    }
+                                    break;
                                 }
+                                // regular
+                                const offs = [_]u3{ 2, 1, 1, 2 };
+                                // check the eight (or less) squares a knight can jump to
+                                for (0..8) |i| {
+                                    // const n_file, const n_file_o = if (i < 2 or i > 5) @addWithOverflow(knight.square.file, offs[i % 4]) else @subWithOverflow(knight.square.file, offs[i % 4]);
+                                    // const n_rank, const n_rank_o = if (i < 4) @addWithOverflow(knight.square.rank, offs[(i + 2) % 4]) else @subWithOverflow(knight.square.rank, offs[(i + 2) % 4]);
+                                    const n_file, const n_file_o = if (i < 2 or i > 5) ADC(knight.square.file, offs[i % 4]) else SBC(knight.square.file, offs[i % 4]);
+                                    const n_rank, const n_rank_o = if (i < 4) ADC(knight.square.rank, offs[(i + 2) % 4]) else SBC(knight.square.rank, offs[(i + 2) % 4]);
+                                    // std.debug.print("<{}, {}, {}>", .{ n_file, n_rank, n_file_o & n_rank_o });
+                                    if (n_file_o == 0 and n_rank_o == 0 and n_file == sqr1.file and n_rank == sqr1.rank) {
+                                        hold_change.save(game, knight, sqr1, is_attack);
+                                        break :nlook;
+                                    }
+                                    // const n_rank = if (i < 4) knight.square.rank + offs[(i + 2) % 4] else knight.square.rank - offs[(i + 2) % 4];
+                                }
+                            } else if (if (file_count == 2) knight.square.file == sqr1.file else knight.square.rank == sqr1.rank and checkPath(knight.square, sqr2) != .none) {
+                                hold_change.save(game, knight, sqr2, is_attack);
+                                break;
                             }
                         }
                     }
@@ -583,58 +598,160 @@ const PgnReader = struct {
                                 // doubly disambiguated
                                 if (file_count == 2 and queen.square.file == sqr1.file and queen.square.rank == sqr1.rank) {
                                     hold_change.save(game, queen, sqr2, is_attack);
-                                } else {
-                                    // dont know, find which by calculating if its paths intersect with the next square
-                                    const queen_in_path = checkPath(sqr1, queen.square);
-                                    if (queen_in_path != .none) {
-                                        const move_positive = switch (queen_in_path) {
-                                            .major, .minor, .horizontal => sqr1.file > queen.square.file,
-                                            .vertical => sqr1.rank > queen.square.rank,
+                                    break;
+                                }
+                                // dont know, find which by calculating if its paths intersect with the next square
+                                const queen_in_path = checkPath(sqr1, queen.square);
+                                if (queen_in_path != .none) {
+                                    const move_positive = switch (queen_in_path) {
+                                        .major, .minor, .horizontal => sqr1.file > queen.square.file,
+                                        .vertical => sqr1.rank > queen.square.rank,
+                                        else => unreachable,
+                                    };
+                                    var path_open = true;
+                                    var sqr_idx = queen.square;
+                                    while (true) {
+                                        // increment to next tile in path
+                                        std.debug.print("=>({}, {}) ", .{ sqr_idx.file, sqr_idx.rank });
+                                        switch (queen_in_path) {
+                                            .horizontal => {
+                                                if (move_positive) sqr_idx.file += 1 else sqr_idx.file -= 1;
+                                            },
+                                            .vertical => {
+                                                if (move_positive) sqr_idx.rank += 1 else sqr_idx.rank -= 1;
+                                            },
+                                            .major => {
+                                                sqr_idx.diaStep(true, move_positive);
+                                            },
+                                            .minor => {
+                                                sqr_idx.diaStep(false, move_positive);
+                                            },
                                             else => unreachable,
-                                        };
-                                        var path_open = true;
-                                        var sqr_idx = queen.square;
-                                        while (true) {
-                                            // increment to next tile in path
-                                            std.debug.print("=>({}, {}) ", .{ sqr_idx.file, sqr_idx.rank });
-                                            switch (queen_in_path) {
-                                                .horizontal => {
-                                                    if (move_positive) sqr_idx.file += 1 else sqr_idx.file -= 1;
-                                                },
-                                                .vertical => {
-                                                    if (move_positive) sqr_idx.rank += 1 else sqr_idx.rank -= 1;
-                                                },
-                                                .major => {
-                                                    sqr_idx.diaStep(true, move_positive);
-                                                },
-                                                .minor => {
-                                                    sqr_idx.diaStep(false, move_positive);
-                                                },
-                                                else => unreachable,
-                                            }
-                                            if (sqr_idx.rank == sqr1.rank and sqr_idx.file == sqr1.file)
-                                                break;
-                                            if (game.board[sqr_idx.boardIndex()] != .nada) {
-                                                path_open = false;
-                                                break;
-                                            }
                                         }
-                                        if (path_open) {
-                                            // finish and leave
-                                            hold_change.save(game, queen, sqr1, is_attack);
+                                        if (sqr_idx.rank == sqr1.rank and sqr_idx.file == sqr1.file)
+                                            break;
+                                        if (game.board[sqr_idx.boardIndex()] != .nada) {
+                                            path_open = false;
                                             break;
                                         }
                                     }
+                                    if (path_open) {
+                                        // finish and leave
+                                        hold_change.save(game, queen, sqr1, is_attack);
+                                        break;
+                                    }
                                 }
-                            } else if (if (file_count == 2) queen.square.file == sqr1.file else queen.square.rank == sqr1.rank) {
+                            } else if (if (file_count == 2) queen.square.file == sqr1.file else queen.square.rank == sqr1.rank and checkPath(queen.square, sqr2) != .none) {
                                 // find by the saved disambiguated position
+                                // precondition: no piece of the same type has this destination square in its path,
+                                // so if more than one share the same file/rank, it still knows to choose this one
+                                hold_change.save(game, queen, sqr2, is_attack);
+                                break;
                             }
                         }
                     }
                 },
                 .r, .R => {
                     for (&players[player_i].rook) |*rook| {
-                        if (rook.alive) {}
+                        if (rook.alive) {
+                            if (file_count == rank_count) {
+                                // doubly disambiguated
+                                if (file_count == 2 and rook.square.file == sqr1.file and rook.square.rank == sqr1.rank) {
+                                    hold_change.save(game, rook, sqr2, is_attack);
+                                    break;
+                                }
+                                // dont know, find which by calculating if its paths intersect with the next square
+                                const rook_in_path = checkPath(sqr1, rook.square);
+                                if (rook_in_path != .none and rook_in_path != .major and rook_in_path != .minor) {
+                                    const move_positive = switch (rook_in_path) {
+                                        .major, .minor, .horizontal => sqr1.file > rook.square.file,
+                                        .vertical => sqr1.rank > rook.square.rank,
+                                        else => unreachable,
+                                    };
+                                    var path_open = true;
+                                    var sqr_idx = rook.square;
+                                    while (true) {
+                                        // increment to next tile in path
+                                        // std.debug.print("=>({}, {}) ", .{ sqr_idx.file, sqr_idx.rank });
+                                        switch (rook_in_path) {
+                                            .horizontal => {
+                                                if (move_positive) sqr_idx.file += 1 else sqr_idx.file -= 1;
+                                            },
+                                            .vertical => {
+                                                if (move_positive) sqr_idx.rank += 1 else sqr_idx.rank -= 1;
+                                            },
+                                            else => unreachable,
+                                        }
+                                        if (sqr_idx.rank == sqr1.rank and sqr_idx.file == sqr1.file)
+                                            break;
+                                        if (game.board[sqr_idx.boardIndex()] != .nada) {
+                                            path_open = false;
+                                            break;
+                                        }
+                                    }
+                                    if (path_open) {
+                                        // finish and leave
+                                        hold_change.save(game, rook, sqr1, is_attack);
+                                        break;
+                                    }
+                                }
+                            } else if (if (file_count == 2) rook.square.file == sqr1.file else rook.square.rank == sqr1.rank and checkPath(rook.square, sqr2) != .none) {
+                                hold_change.save(game, rook, sqr2, is_attack);
+                                break;
+                            }
+                        }
+                    }
+                },
+                .b, .B => {
+                    for (&players[player_i].bishop) |*bishop| {
+                        if (bishop.alive) {
+                            if (file_count == rank_count) {
+                                // doubly disambiguated
+                                if (file_count == 2 and bishop.square.file == sqr1.file and bishop.square.rank == sqr1.rank) {
+                                    hold_change.save(game, bishop, sqr2, is_attack);
+                                    break;
+                                }
+                                // dont know, find which by calculating if its paths intersect with the next square
+                                const bishop_in_path = checkPath(sqr1, bishop.square);
+                                std.debug.print("!{any}!", .{bishop_in_path});
+                                if (bishop_in_path != .none and bishop_in_path != .horizontal and bishop_in_path != .vertical) {
+                                    const move_positive = switch (bishop_in_path) {
+                                        .major, .minor, .horizontal => sqr1.file > bishop.square.file,
+                                        .vertical => sqr1.rank > bishop.square.rank,
+                                        else => unreachable,
+                                    };
+                                    var path_open = true;
+                                    var sqr_idx = bishop.square;
+                                    while (true) {
+                                        // increment to next tile in path
+                                        // std.debug.print("=>({}, {}) ", .{ sqr_idx.file, sqr_idx.rank });
+                                        switch (bishop_in_path) {
+                                            .major => {
+                                                sqr_idx.diaStep(true, move_positive);
+                                            },
+                                            .minor => {
+                                                sqr_idx.diaStep(false, move_positive);
+                                            },
+                                            else => unreachable,
+                                        }
+                                        if (sqr_idx.rank == sqr1.rank and sqr_idx.file == sqr1.file)
+                                            break;
+                                        if (game.board[sqr_idx.boardIndex()] != .nada) {
+                                            path_open = false;
+                                            break;
+                                        }
+                                    }
+                                    if (path_open) {
+                                        // finish and leave
+                                        hold_change.save(game, bishop, sqr1, is_attack);
+                                        break;
+                                    }
+                                }
+                            } else if (if (file_count == 2) bishop.square.file == sqr1.file else bishop.square.rank == sqr1.rank and checkPath(bishop.square, sqr2) != .none) {
+                                hold_change.save(game, bishop, sqr2, is_attack);
+                                break;
+                            }
+                        }
                     }
                 },
                 else => {},
@@ -935,4 +1052,10 @@ test "read file into slice" {
     defer std.testing.allocator.free(content);
     _ = try std.fs.cwd().readFile("test.txt", content);
     std.debug.print("{s}\nWow! Incredible!\n", .{content});
+}
+
+test "overflow the same?" {
+    const t1 = @typeName(@TypeOf(@addWithOverflow(Square.default.file, 1)));
+    const t2 = @typeName(@TypeOf(@subWithOverflow(Square.default.rank, 1)));
+    std.debug.print("{}", .{std.mem.eql(u8, t1, t2)});
 }
