@@ -111,7 +111,7 @@ const Square = struct {
     const Self = @This();
     file: u3,
     rank: u3,
-    const default: Square = .{ .file = 0, .rank = 0 };
+    const default: Square = .{ .file = 0, .rank = 0 }; // a1
     /// algebraic notation of square as a 2-byte string
     fn str(self: Self) [2]u8 {
         return .{ 'a' + @as(u8, self.file), '1' + @as(u8, self.rank) };
@@ -314,7 +314,7 @@ const PgnReader = struct {
     fn init(allocator: Allocator, contents: []const u8) !PgnReader {
         var move_list = try std.ArrayList(Change).initCapacity(allocator, 50);
         var game = Game{};
-        game.flip = true;
+        game.flip = false;
 
         var file = try std.fs.cwd().openFile(contents, .{});
         defer file.close();
@@ -712,12 +712,13 @@ const PgnReader = struct {
                                     break;
                                 }
                                 // dont know, find which by calculating if its paths intersect with the next square
-                                const bishop_in_path = checkPath(sqr1, bishop.square);
+                                const bishop_in_path = checkPath(bishop.square, sqr1);
                                 std.debug.print("!{any}!", .{bishop_in_path});
                                 if (bishop_in_path != .none and bishop_in_path != .horizontal and bishop_in_path != .vertical) {
                                     const move_positive = switch (bishop_in_path) {
-                                        .major, .minor, .horizontal => sqr1.file > bishop.square.file,
-                                        .vertical => sqr1.rank > bishop.square.rank,
+                                        .major,
+                                        .minor,
+                                        => sqr1.file > bishop.square.file,
                                         else => unreachable,
                                     };
                                     var path_open = true;
@@ -727,6 +728,7 @@ const PgnReader = struct {
                                         // std.debug.print("=>({}, {}) ", .{ sqr_idx.file, sqr_idx.rank });
                                         switch (bishop_in_path) {
                                             .major => {
+                                                // std.debug.print("{s} ", .{sqr_idx.str()});
                                                 sqr_idx.diaStep(true, move_positive);
                                             },
                                             .minor => {
@@ -815,9 +817,11 @@ const PgnReader = struct {
             return .horizontal;
         } else if (a.file == b.file) {
             return .vertical;
-        } else if (a.rank -% a.file == b.rank -% b.file) {
+        } else if (@as(isize, a.rank) - @as(isize, a.file) + 1 == @as(isize, b.rank) - @as(isize, b.file) + 1) {
+            // std.debug.print("\narnk({}) -% afil({}) = {}\nbrnk({}) -% bfil({}) = {}\n", .{ a.rank, a.file, a.rank -% a.file +% 1, b.rank, b.file, b.rank -% b.file +% 1 });
+            // std.debug.print("\narnk({}) +% afil({}) = {}\nbrnk({}) +% bfil({}) = {}\n", .{ a.rank, a.file, a.rank +% a.file, b.rank, b.file, b.rank +% b.file });
             return .major;
-        } else if (a.rank +% a.file == b.rank +% b.file) {
+        } else if (@as(isize, a.rank) + @as(isize, a.file) == @as(isize, b.rank) + @as(isize, b.file)) {
             return .minor;
         }
         return .none;
@@ -826,6 +830,27 @@ const PgnReader = struct {
         self.move_list.deinit(self.allocator);
     }
 };
+
+test "check major or minor" {
+    std.debug.print("\nMAJOR check (a.rank -% a.file)\n", .{});
+    for (0..8) |rank| {
+        for (0..8) |file| {
+            const ri: isize = @intCast(rank);
+            const fi: isize = @intCast(file);
+            std.debug.print("{:>3}", .{ri -% fi});
+        }
+        std.debug.print("\n", .{});
+    }
+    std.debug.print("\nMINOR check (a.rank +% a.file)\n", .{});
+    for (0..8) |rank| {
+        for (0..8) |file| {
+            const ru3: isize = @intCast(rank);
+            const fu3: isize = @intCast(file);
+            std.debug.print("{:>3}", .{ru3 +% fu3});
+        }
+        std.debug.print("\n", .{});
+    }
+}
 
 // so I can view the colors
 const RGBWheel = struct {
