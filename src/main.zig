@@ -179,7 +179,7 @@ const Player = struct {
 // https://www.saremba.de/chessgml/standards/pgn/pgn-complete.htm
 const Game = struct {
     const Self = @This();
-    const initial_board = "RNBQKBNRPPPPPPPP................................pppppppprnbqkbnr";
+    const initial_board = "rnbqkbnrpppppppp................................PPPPPPPPRNBQKBNR";
     white: []const u8 = "Player 1",
     black: []const u8 = "Player 2",
     result: []const u8 = "Draw",
@@ -236,23 +236,35 @@ const Change = struct {
             const from_or_to = if (reverse) (self.to.rank -% self.to.file) % 2 == 0 else (self.from.rank -% self.from.file) % 2 == 0;
             const p_replace = if (self.enpassant or !reverse) Pieces.nada else self.replace;
             const piece_c = if (!self.side) colorFmt(white) else colorFmt(black);
-            const sqr_c = if (from_or_to) colorFmt(bg1) else colorFmt(bg2);
-            const row: u32 = if (reverse) self.to.rank else self.from.rank;
-            const col: u32 = if (reverse) self.to.file else self.from.file;
+            const sqr_c = if (from_or_to) colorFmt(bg2) else colorFmt(bg1);
+            var row: u32 = if (reverse) self.to.rank else self.from.rank;
+            var col: u32 = if (reverse) self.to.file else self.from.file;
+            if (!self.flip) {
+                row = 7 - row;
+                col = 7 - col;
+            }
             std.debug.print(BG_FMT2 ++ FG_FMT2 ++ GOTO_FMT ++ "{s}", .{ sqr_c, piece_c, row + 2, 2 * col + 1, p_replace.str() });
         }
         if (self.castle) |rook| {
             const rook_dir = if (reverse) (rook.to.rank -% rook.to.file) % 2 == 0 else (rook.from.rank -% rook.from.file) % 2 == 0;
-            const rook_sqr_c = if (rook_dir) colorFmt(bg1) else colorFmt(bg2);
-            const rook_row: u32 = if (reverse) rook.to.rank else rook.from.rank;
-            const rook_col: u32 = if (reverse) rook.to.file else rook.from.file;
+            const rook_sqr_c = if (rook_dir) colorFmt(bg2) else colorFmt(bg1);
+            var rook_row: u32 = if (reverse) rook.to.rank else rook.from.rank;
+            var rook_col: u32 = if (reverse) rook.to.file else rook.from.file;
+            if (!self.flip) {
+                rook_row = 7 - rook_row;
+                rook_col = 7 - rook_col;
+            }
             std.debug.print(BG_FMT2 ++ GOTO_FMT ++ "  ", .{ rook_sqr_c, rook_row + 2, 2 * rook_col + 1 });
         }
         if (self.enpassant) {
             // take the file of `to` and the rank of `from`
             const enpass_c = if ((self.from.rank -% self.to.file) % 2 == 0) colorFmt(bg1) else colorFmt(bg2);
             const piece_c = if (!self.side) colorFmt(white) else colorFmt(black);
-            const row: u32, const col: u32 = .{ self.from.rank, self.to.file };
+            var row: u32, var col: u32 = .{ self.from.rank, self.to.file };
+            if (!self.flip) {
+                row = 7 - row;
+                col = 7 - col;
+            }
             const p_rev = if (reverse) self.replace else Pieces.nada;
             std.debug.print(BG_FMT2 ++ FG_FMT2 ++ GOTO_FMT ++ "{s}", .{ enpass_c, piece_c, row + 2, 2 * col + 1, p_rev.str() });
         }
@@ -261,16 +273,24 @@ const Change = struct {
     fn printPiece(self: Self, reverse: bool) void {
         const piece_c = if (self.side) colorFmt(white) else colorFmt(black);
         const condition = if (reverse) (self.from.rank -% self.from.file) % 2 == 0 else (self.to.rank -% self.to.file) % 2 == 0;
-        const sqr_c = if (condition) colorFmt(bg1) else colorFmt(bg2);
-        const row: u32 = if (reverse) self.from.rank else self.to.rank;
-        const col: u32 = if (reverse) self.from.file else self.to.file;
+        const sqr_c = if (condition) colorFmt(bg2) else colorFmt(bg1);
+        var row: u32 = if (reverse) self.from.rank else self.to.rank;
+        var col: u32 = if (reverse) self.from.file else self.to.file;
+        if (!self.flip) {
+            row = 7 - row;
+            col = 7 - col;
+        }
         const p_rev = self.mover;
         std.debug.print(BG_FMT2 ++ FG_FMT2 ++ GOTO_FMT ++ "{s}", .{ sqr_c, piece_c, row + 2, 2 * col + 1, p_rev.str() });
         if (self.castle) |rook| {
             const from_or_to = if (reverse) (rook.from.rank -% rook.from.file) % 2 == 0 else (rook.to.rank -% rook.to.file) % 2 == 0;
-            const rook_sqr_c = if (from_or_to) colorFmt(bg1) else colorFmt(bg2);
-            const rook_row: u32 = if (reverse) rook.from.rank else rook.to.rank;
-            const rook_col: u32 = if (reverse) rook.from.file else rook.to.file;
+            const rook_sqr_c = if (from_or_to) colorFmt(bg2) else colorFmt(bg1);
+            var rook_row: u32 = (if (reverse) rook.from.rank else rook.to.rank);
+            var rook_col: u32 = (if (reverse) rook.from.file else rook.to.file);
+            if (!self.flip) {
+                rook_row = 7 - rook_row;
+                rook_col = 7 - rook_col;
+            }
             const rook_e: Pieces = if (self.side) .R else .r;
             std.debug.print(BG_FMT2 ++ FG_FMT2 ++ GOTO_FMT ++ "{s}", .{ rook_sqr_c, piece_c, rook_row + 2, 2 * rook_col + 1, rook_e.str() });
         }
@@ -311,10 +331,10 @@ const PgnReader = struct {
     game_info: Game,
     current_move: usize = 0,
     move_list: std.ArrayList(Change),
-    fn init(allocator: Allocator, contents: []const u8) !PgnReader {
+    fn init(allocator: Allocator, contents: []const u8, flip: bool) !PgnReader {
         var move_list = try std.ArrayList(Change).initCapacity(allocator, 50);
         var game = Game{};
-        game.flip = false;
+        game.flip = flip;
 
         var file = try std.fs.cwd().openFile(contents, .{});
         defer file.close();
@@ -354,7 +374,7 @@ const PgnReader = struct {
                 }
             }
             const next_line = try file_out.peekDelimiterExclusive('\n');
-            std.debug.print("\n(next has {} characters)\n", .{next_line.len});
+            // std.debug.print("\n(next has {} characters)\n", .{next_line.len});
             if (next_line.len <= 1) {
                 break;
             }
@@ -386,7 +406,7 @@ const PgnReader = struct {
                             const res_change = parseMove(&game, &players, is_white, remaining_file[start_index..i]);
                             // add move
                             try move_list.append(allocator, res_change);
-                            std.debug.print("{c}, ", .{@intFromEnum(res_change.mover)});
+                            // std.debug.print("{c}, ", .{@intFromEnum(res_change.mover)});
                             // game.printBoard();
                             // std.debug.print("{s} ", .{move_text});
                             start_read = false;
@@ -417,16 +437,16 @@ const PgnReader = struct {
             }
         }
         // debug: view what recorded
-        std.debug.print("{} plies! {} moves!\n", .{ move_list.items.len, move_list.items.len / 2 });
+        // std.debug.print("{} plies! {} moves!\n", .{ move_list.items.len, move_list.items.len / 2 });
         for (move_list.items) |change| {
-            std.debug.print("{c} from {s} to {s},", .{ @intFromEnum(change.mover), change.from.str(), change.to.str() });
+            // std.debug.print("{c} from {s} to {s},", .{ @intFromEnum(change.mover), change.from.str(), change.to.str() });
             if (change.replace != .nada) {
-                std.debug.print("x {c}", .{@intFromEnum(change.replace)});
+                // std.debug.print("x {c}", .{@intFromEnum(change.replace)});
             }
             // if (change.castle) |c| {
             //     std.debug.print("{any}", .{c});
             // }
-            std.debug.print("\n", .{});
+            // std.debug.print("\n", .{});
         }
         return .{
             .allocator = allocator,
@@ -438,7 +458,7 @@ const PgnReader = struct {
         const player_i: usize = @intFromBool(is_white);
         var castling = false;
         // push to movelist
-        var hold_change: Change = .{ .side = is_white };
+        var hold_change: Change = .{ .side = is_white, .flip = game.flip };
         // check which piece is moving
         hold_change.mover = switch (move[0]) {
             'K' => if (is_white) .K else .k,
@@ -506,7 +526,7 @@ const PgnReader = struct {
                     is_attack = true;
                 }
             }
-            std.debug.print("1[{s}] 2[{s}] ", .{ sqr1.str(), sqr2.str() });
+            // std.debug.print("1[{s}] 2[{s}] ", .{ sqr1.str(), sqr2.str() });
             // file_count, rank_count
             // 1,1 (ex. Ke6)            from: <find>,                to: sqr1
             // 2,1 or 1,2 (ex. bxc5)    from: sqr1.file | sqr1.rank, to: sqr2
@@ -612,7 +632,7 @@ const PgnReader = struct {
                                     var sqr_idx = queen.square;
                                     while (true) {
                                         // increment to next tile in path
-                                        std.debug.print("=>({}, {}) ", .{ sqr_idx.file, sqr_idx.rank });
+                                        // std.debug.print("=>({}, {}) ", .{ sqr_idx.file, sqr_idx.rank });
                                         switch (queen_in_path) {
                                             .horizontal => {
                                                 if (move_positive) sqr_idx.file += 1 else sqr_idx.file -= 1;
@@ -713,7 +733,7 @@ const PgnReader = struct {
                                 }
                                 // dont know, find which by calculating if its paths intersect with the next square
                                 const bishop_in_path = checkPath(bishop.square, sqr1);
-                                std.debug.print("!{any}!", .{bishop_in_path});
+                                // std.debug.print("!{any}!", .{bishop_in_path});
                                 if (bishop_in_path != .none and bishop_in_path != .horizontal and bishop_in_path != .vertical) {
                                     const move_positive = switch (bishop_in_path) {
                                         .major,
@@ -766,12 +786,20 @@ const PgnReader = struct {
     }
     fn drawInit(self: Self) void {
         std.debug.print(CLS ++ GOTO_FMT, .{ 1, 1 });
-        for (Game.initial_board, 0..) |P, i| {
+        for (0..Game.initial_board.len) |i| {
+            // unflipped index is 0-7, 8-15, ...; flipped index is 56-63, 48-55, ...
+            // nvm, very complicated for zilch
+            const P = Game.initial_board[if (self.game_info.flip) (63 - i) else i];
             if (i % 8 == 0)
                 std.debug.print("\n", .{});
             const r = i / 8;
             const f = i % 8;
-            const tile_c = if ((r -% f) % 2 == 0) colorFmt(bg1) else colorFmt(bg2);
+            var tile_c: []const u8 = undefined;
+            if ((r -% f) % 2 == 0) {
+                tile_c = if (self.game_info.flip) colorFmt(bg2) else colorFmt(bg2);
+            } else {
+                tile_c = if (self.game_info.flip) colorFmt(bg1) else colorFmt(bg1);
+            }
             const piece_c = if (std.ascii.isUpper(P)) colorFmt(white) else colorFmt(black);
             const piece_e: Pieces = @enumFromInt(P);
             std.debug.print(BG_FMT2 ++ FG_FMT2 ++ "{s}" ++ RESET_COL, .{ tile_c, piece_c, piece_e.str() });
@@ -780,6 +808,7 @@ const PgnReader = struct {
         std.debug.print("\n\n" ++ SAVE_POS ++ "Input:", .{});
         // go back and print player names and clocks
         if (self.game_info.flip) {
+
             // const top_pname = if (self.game_info.flip) self.game_info.white else self.game_info.black;
             // // const top_clock = self.game_info.clock;
             // const bottom_pname = if (self.game_info.flip) self.game_info.black else self.game_info.white;
@@ -818,8 +847,6 @@ const PgnReader = struct {
         } else if (a.file == b.file) {
             return .vertical;
         } else if (@as(isize, a.rank) - @as(isize, a.file) + 1 == @as(isize, b.rank) - @as(isize, b.file) + 1) {
-            // std.debug.print("\narnk({}) -% afil({}) = {}\nbrnk({}) -% bfil({}) = {}\n", .{ a.rank, a.file, a.rank -% a.file +% 1, b.rank, b.file, b.rank -% b.file +% 1 });
-            // std.debug.print("\narnk({}) +% afil({}) = {}\nbrnk({}) +% bfil({}) = {}\n", .{ a.rank, a.file, a.rank +% a.file, b.rank, b.file, b.rank +% b.file });
             return .major;
         } else if (@as(isize, a.rank) + @as(isize, a.file) == @as(isize, b.rank) + @as(isize, b.file)) {
             return .minor;
@@ -830,27 +857,6 @@ const PgnReader = struct {
         self.move_list.deinit(self.allocator);
     }
 };
-
-test "check major or minor" {
-    std.debug.print("\nMAJOR check (a.rank -% a.file)\n", .{});
-    for (0..8) |rank| {
-        for (0..8) |file| {
-            const ri: isize = @intCast(rank);
-            const fi: isize = @intCast(file);
-            std.debug.print("{:>3}", .{ri -% fi});
-        }
-        std.debug.print("\n", .{});
-    }
-    std.debug.print("\nMINOR check (a.rank +% a.file)\n", .{});
-    for (0..8) |rank| {
-        for (0..8) |file| {
-            const ru3: isize = @intCast(rank);
-            const fu3: isize = @intCast(file);
-            std.debug.print("{:>3}", .{ru3 +% fu3});
-        }
-        std.debug.print("\n", .{});
-    }
-}
 
 // so I can view the colors
 const RGBWheel = struct {
@@ -898,12 +904,14 @@ pub fn main() !void {
         \\usage: chess_viewer [fname] [options]
         \\
         \\  -h show this message
-        \\  -f frame-by-frame by pressing 'R' and 'L' to move forward/backward
+        \\  -f flip board
+        \\  -p pause for frame-by-frame by pressing 'R' and 'L' to move forward/backward
         \\  -e explode
         \\
     ;
     var fname: []const u8 = &.{};
     var frame_play = false;
+    var flip_flag = false;
     // get filename first
     if (args.next()) |argv| {
         std.debug.print("args was {s}!\n", .{argv});
@@ -917,7 +925,8 @@ pub fn main() !void {
             for (arg[1..arg.len]) |ch| {
                 switch (ch) {
                     'h' => std.debug.print(help_msg, .{}),
-                    'f' => frame_play = true,
+                    'p' => frame_play = true,
+                    'f' => flip_flag = true,
                     else => {},
                 }
             }
@@ -932,14 +941,7 @@ pub fn main() !void {
     _ = std.os.windows.kernel32.SetConsoleOutputCP(65001);
     defer _ = std.os.windows.kernel32.SetConsoleOutputCP(original_cp);
 
-    // std.debug.print("new?", .{});
-    const pawn_base = "♟";
-    const pawn_base_v15 = "\u{265F}\u{fe0e}";
-    const pawn_base_v16 = "\u{265F}\u{fe0f}";
-    // const pawn_base_emoji = "♟️";
-    std.debug.print("\nBase {s}\nDingbat (base+V16) {s}\nEmoji (base+V15) {s}\n", .{ pawn_base, pawn_base_v15, pawn_base_v16 });
-
-    var my_pgn = PgnReader.init(allocator, fname) catch |err| {
+    var my_pgn = PgnReader.init(allocator, fname, flip_flag) catch |err| {
         std.debug.print("Error: {t}\n", .{err});
         return;
     };
