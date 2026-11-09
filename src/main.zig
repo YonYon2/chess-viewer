@@ -352,13 +352,14 @@ const PgnReader = struct {
             tag_name = try file_out.peekDelimiterExclusive(' ');
             _ = try file_out.discardDelimiterInclusive('"');
             value = try file_out.peekDelimiterExclusive('"');
+            std.debug.print("value:{s}\n", .{value});
             _ = try file_out.discardDelimiterInclusive('\n');
             for (tags, 0..) |tag, i| {
                 if (std.mem.eql(u8, tag, tag_name)) {
                     switch (i) {
-                        0 => game.white = value,
-                        1 => game.black = value,
-                        2 => game.result = value,
+                        0 => game.white = try allocator.dupe(u8, value),
+                        1 => game.black = try allocator.dupe(u8, value),
+                        2 => game.result = try allocator.dupe(u8, value),
                         3 => {
                             var time_it = std.mem.tokenizeScalar(u8, value, '+');
                             if (time_it.next()) |clock| {
@@ -448,6 +449,7 @@ const PgnReader = struct {
             // }
             // std.debug.print("\n", .{});
         }
+        std.debug.print("Player Black was set to...? {s}\n", .{game.black});
         return .{
             .allocator = allocator,
             .game_info = game,
@@ -794,12 +796,7 @@ const PgnReader = struct {
                 std.debug.print("\n", .{});
             const r = i / 8;
             const f = i % 8;
-            var tile_c: []const u8 = undefined;
-            if ((r -% f) % 2 == 0) {
-                tile_c = if (self.game_info.flip) colorFmt(bg2) else colorFmt(bg2);
-            } else {
-                tile_c = if (self.game_info.flip) colorFmt(bg1) else colorFmt(bg1);
-            }
+            const tile_c = if ((r -% f) % 2 == 0) colorFmt(bg2) else colorFmt(bg1);
             const piece_c = if (std.ascii.isUpper(P)) colorFmt(white) else colorFmt(black);
             const piece_e: Pieces = @enumFromInt(P);
             std.debug.print(BG_FMT2 ++ FG_FMT2 ++ "{s}" ++ RESET_COL, .{ tile_c, piece_c, piece_e.str() });
@@ -807,16 +804,14 @@ const PgnReader = struct {
         // save the input line position
         std.debug.print("\n\n" ++ SAVE_POS ++ "Input:", .{});
         // go back and print player names and clocks
-        if (self.game_info.flip) {
-
-            // const top_pname = if (self.game_info.flip) self.game_info.white else self.game_info.black;
-            // // const top_clock = self.game_info.clock;
-            // const bottom_pname = if (self.game_info.flip) self.game_info.black else self.game_info.white;
-            // _ = bottom_pname;
-            // std.debug.print(cursorGoto(1, 11) ++ "{s}" ++ cursorGoto(2, 11), .{
-            //     top_pname,
-            // });
-        } else {
+        const top_pname = if (self.game_info.flip) self.game_info.white else self.game_info.black;
+        // _ = top_pname;
+        // const top_clock = self.game_info.clock;
+        const bottom_pname = if (self.game_info.flip) self.game_info.black else self.game_info.white;
+        _ = bottom_pname;
+        // std.debug.print(RESET_COL, .{});
+        std.debug.print(GOTO_FMT ++ "{s}", .{ 1, 11, top_pname });
+        if (self.game_info.flip) {} else {
             // std.debug.print(cursorGoto(1, 11) ++ self.game_info.white, .{});
         }
     }
@@ -855,6 +850,9 @@ const PgnReader = struct {
     }
     fn deinit(self: *Self) void {
         self.move_list.deinit(self.allocator);
+        self.allocator.free(self.game_info.white);
+        self.allocator.free(self.game_info.black);
+        self.allocator.free(self.game_info.result);
     }
 };
 
@@ -946,6 +944,7 @@ pub fn main() !void {
         return;
     };
     defer my_pgn.deinit();
+    std.debug.print("Black is played by {s}\n", .{my_pgn.game_info.black});
     my_pgn.drawInit();
     defer std.debug.print(RESET_COL ++ "\n", .{});
 
