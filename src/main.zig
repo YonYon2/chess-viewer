@@ -802,7 +802,7 @@ const PgnReader = struct {
             std.debug.print(BG_FMT2 ++ FG_FMT2 ++ "{s}" ++ RESET_COL, .{ tile_c, piece_c, piece_e.str() });
         }
         // save the input line position
-        std.debug.print("\n\n" ++ SAVE_POS ++ "Input:", .{});
+        std.debug.print("\n\n" ++ SAVE_POS ++ "\nInput:", .{});
         // go back and print player names and clocks
         const top_pname = if (self.game_info.flip) self.game_info.white else self.game_info.black;
         // _ = top_pname;
@@ -822,7 +822,7 @@ const PgnReader = struct {
         const curr = self.move_list.items[self.current_move];
         curr.printPiece(false);
         curr.printBlank(false);
-        std.debug.print(LOAD_POS, .{});
+        std.debug.print(LOAD_POS ++ "{s}\nInput:", .{""});
         self.current_move += 1;
         return !(self.current_move >= self.move_list.items.len);
     }
@@ -899,7 +899,7 @@ pub fn main() !void {
     _ = args.skip(); // skip executable's name
 
     const help_msg =
-        \\usage: chess_viewer [fname] [options]
+        \\usage: chess_viewer <fname> [options]
         \\
         \\  -h show this message
         \\  -f flip board
@@ -907,31 +907,35 @@ pub fn main() !void {
         \\  -e explode
         \\
     ;
-    var fname: []const u8 = &.{};
+    var fname: ?[]const u8 = null;
+    var option_found = false;
     var frame_play = false;
     var flip_flag = false;
-    // get filename first
-    if (args.next()) |argv| {
-        std.debug.print("args was {s}!\n", .{argv});
-        fname = argv;
-    } else {
-        std.debug.print(help_msg, .{});
-        return;
-    }
     while (args.next()) |arg| {
         if (arg[0] == '-') {
+            option_found = true;
             for (arg[1..arg.len]) |ch| {
                 switch (ch) {
                     'h' => std.debug.print(help_msg, .{}),
                     'p' => frame_play = true,
                     'f' => flip_flag = true,
-                    else => {},
+                    else => {
+                        std.debug.print("Not a valid option.\n{s}", .{help_msg});
+                        return;
+                    },
                 }
             }
-        } else {
-            std.debug.print("what?\n", .{});
-            return;
+        } else if (fname == null) {
+            fname = arg[0..arg.len];
         }
+    }
+    if (fname == null) {
+        if (!option_found) {
+            std.debug.print(help_msg, .{});
+        } else {
+            std.debug.print("No file provided.\n", .{});
+        }
+        return;
     }
 
     // enable unicode code page
@@ -939,7 +943,7 @@ pub fn main() !void {
     _ = std.os.windows.kernel32.SetConsoleOutputCP(65001);
     defer _ = std.os.windows.kernel32.SetConsoleOutputCP(original_cp);
 
-    var my_pgn = PgnReader.init(allocator, fname, flip_flag) catch |err| {
+    var my_pgn = PgnReader.init(allocator, fname.?, flip_flag) catch |err| {
         std.debug.print("Error: {t}\n", .{err});
         return;
     };
