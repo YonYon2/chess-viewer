@@ -230,28 +230,31 @@ const Change = struct {
     check: bool = false, // will be used to highlight the opposing king
     enpassant: bool = false, // replace will redo the piece to the left/right of the pawn
     delay: u32 = 1, // tenths of a second
+    algebra: [8]u8 = [1]u8{' '} ** 8, // the move in algebraic notation
     /// blanks the from square with the correct background color and at the correct cursor position, accounting for flip
     fn printBlank(self: Self, reverse: bool) void {
         {
             const from_or_to = if (reverse) (self.to.rank -% self.to.file) % 2 == 0 else (self.from.rank -% self.from.file) % 2 == 0;
             const p_replace = if (self.enpassant or !reverse) Pieces.nada else self.replace;
             const piece_c = if (!self.side) colorFmt(white) else colorFmt(black);
-            const sqr_c = if (from_or_to) colorFmt(bg2) else colorFmt(bg1);
+            const sqr_c = if (from_or_to) colorFmt(bg1) else colorFmt(bg2);
             var row: u32 = if (reverse) self.to.rank else self.from.rank;
             var col: u32 = if (reverse) self.to.file else self.from.file;
             if (!self.flip) {
                 row = 7 - row;
+            } else {
                 col = 7 - col;
             }
             std.debug.print(BG_FMT2 ++ FG_FMT2 ++ GOTO_FMT ++ "{s}", .{ sqr_c, piece_c, row + 2, 2 * col + 1, p_replace.str() });
         }
         if (self.castle) |rook| {
             const rook_dir = if (reverse) (rook.to.rank -% rook.to.file) % 2 == 0 else (rook.from.rank -% rook.from.file) % 2 == 0;
-            const rook_sqr_c = if (rook_dir) colorFmt(bg2) else colorFmt(bg1);
+            const rook_sqr_c = if (rook_dir) colorFmt(bg1) else colorFmt(bg2);
             var rook_row: u32 = if (reverse) rook.to.rank else rook.from.rank;
             var rook_col: u32 = if (reverse) rook.to.file else rook.from.file;
             if (!self.flip) {
                 rook_row = 7 - rook_row;
+            } else {
                 rook_col = 7 - rook_col;
             }
             std.debug.print(BG_FMT2 ++ GOTO_FMT ++ "  ", .{ rook_sqr_c, rook_row + 2, 2 * rook_col + 1 });
@@ -263,6 +266,7 @@ const Change = struct {
             var row: u32, var col: u32 = .{ self.from.rank, self.to.file };
             if (!self.flip) {
                 row = 7 - row;
+            } else {
                 col = 7 - col;
             }
             const p_rev = if (reverse) self.replace else Pieces.nada;
@@ -273,22 +277,24 @@ const Change = struct {
     fn printPiece(self: Self, reverse: bool) void {
         const piece_c = if (self.side) colorFmt(white) else colorFmt(black);
         const condition = if (reverse) (self.from.rank -% self.from.file) % 2 == 0 else (self.to.rank -% self.to.file) % 2 == 0;
-        const sqr_c = if (condition) colorFmt(bg2) else colorFmt(bg1);
+        const sqr_c = if (condition) colorFmt(bg1) else colorFmt(bg2);
         var row: u32 = if (reverse) self.from.rank else self.to.rank;
         var col: u32 = if (reverse) self.from.file else self.to.file;
         if (!self.flip) {
             row = 7 - row;
+        } else {
             col = 7 - col;
         }
         const p_rev = self.mover;
         std.debug.print(BG_FMT2 ++ FG_FMT2 ++ GOTO_FMT ++ "{s}", .{ sqr_c, piece_c, row + 2, 2 * col + 1, p_rev.str() });
         if (self.castle) |rook| {
             const from_or_to = if (reverse) (rook.from.rank -% rook.from.file) % 2 == 0 else (rook.to.rank -% rook.to.file) % 2 == 0;
-            const rook_sqr_c = if (from_or_to) colorFmt(bg2) else colorFmt(bg1);
+            const rook_sqr_c = if (from_or_to) colorFmt(bg1) else colorFmt(bg2);
             var rook_row: u32 = (if (reverse) rook.from.rank else rook.to.rank);
             var rook_col: u32 = (if (reverse) rook.from.file else rook.to.file);
             if (!self.flip) {
                 rook_row = 7 - rook_row;
+            } else {
                 rook_col = 7 - rook_col;
             }
             const rook_e: Pieces = if (self.side) .R else .r;
@@ -461,6 +467,10 @@ const PgnReader = struct {
         var castling = false;
         // push to movelist
         var hold_change: Change = .{ .side = is_white, .flip = game.flip };
+        // save move text
+        for (move, 0..) |chr, i| {
+            hold_change.algebra[i] = chr;
+        }
         // check which piece is moving
         hold_change.mover = switch (move[0]) {
             'K' => if (is_white) .K else .k,
@@ -822,7 +832,7 @@ const PgnReader = struct {
         const curr = self.move_list.items[self.current_move];
         curr.printPiece(false);
         curr.printBlank(false);
-        std.debug.print(LOAD_POS ++ "{s}\nInput:", .{""});
+        std.debug.print(LOAD_POS ++ "{s}\nInput:", .{curr.algebra});
         self.current_move += 1;
         return !(self.current_move >= self.move_list.items.len);
     }
@@ -833,7 +843,7 @@ const PgnReader = struct {
         const curr = self.move_list.items[self.current_move];
         curr.printPiece(true);
         curr.printBlank(true);
-        std.debug.print(LOAD_POS, .{});
+        std.debug.print(LOAD_POS ++ "{s}\nInput:", .{curr.algebra});
     }
     const PathType = enum { none, horizontal, vertical, major, minor };
     fn checkPath(a: Square, b: Square) PathType {
@@ -953,7 +963,7 @@ pub fn main() !void {
     defer std.debug.print(RESET_COL ++ "\n", .{});
 
     // terminal keyboard input
-    // TODO need to turn off line mode so the byte it taken instantly
+    // TODO need to turn off line mode so the byte is taken instantly
     var input_b: [1]u8 = undefined; //"q".*;
     var stdin_reader = std.fs.File.stdin().reader(&input_b);
     const stdin = &stdin_reader.interface;
@@ -967,19 +977,15 @@ pub fn main() !void {
                 if (!my_pgn.drawNext())
                     break;
             }
-            // playing animation
-            // update progress bar?
-            // update clocks for shor
-
         }
     } else {
         // only accept 'L' for previous, 'R' or ' ' for next
+        var input_char: u8 = '!';
         while (std.ascii.toLower(input_b[0]) != 'q') {
-            // std.debug.print("{}\r", .{try stdin.takeByte()});
-            const char = try stdin.takeByte();
-            if (std.ascii.toLower(char) == 'r' or char == ' ') {
+            input_char = try stdin.takeByte();
+            if (std.ascii.toLower(input_char) == 'r' or input_char == ' ') {
                 _ = my_pgn.drawNext();
-            } else if (std.ascii.toLower(char) == 'l') {
+            } else if (std.ascii.toLower(input_char) == 'l') {
                 my_pgn.drawPrev();
             }
         }
@@ -1088,4 +1094,9 @@ test "overflow the same?" {
     const t1 = @typeName(@TypeOf(@addWithOverflow(Square.default.file, 1)));
     const t2 = @typeName(@TypeOf(@subWithOverflow(Square.default.rank, 1)));
     std.debug.print("{}", .{std.mem.eql(u8, t1, t2)});
+}
+
+test "print string formatted" {
+    const yurm: []const u8 = &([_]u8{ 'y', 'u', 'r', 'm' } ++ [1]u8{0} ** 4);
+    std.debug.print("\n\"{s:x>9}\"\n", .{yurm[0..4 :0]});
 }
