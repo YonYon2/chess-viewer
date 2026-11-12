@@ -818,9 +818,9 @@ const PgnReader = struct {
         // _ = top_pname;
         // const top_clock = self.game_info.clock;
         const bottom_pname = if (self.game_info.flip) self.game_info.black else self.game_info.white;
-        _ = bottom_pname;
+        // _ = bottom_pname;
         // std.debug.print(RESET_COL, .{});
-        std.debug.print(GOTO_FMT ++ "{s}", .{ 1, 11, top_pname });
+        std.debug.print(GOTO_FMT ++ "{s}" ++ GOTO_FMT ++ "{s}", .{ 1, 1, top_pname, 10, 1, bottom_pname });
         if (self.game_info.flip) {} else {
             // std.debug.print(cursorGoto(1, 11) ++ self.game_info.white, .{});
         }
